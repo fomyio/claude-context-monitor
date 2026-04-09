@@ -98,6 +98,8 @@ node -e "
   }
 
   state.total_turns = stats.total_turns;
+  state.transcript_path = '$TRANSCRIPT_PATH';
+  state.model = stats.model || state.model || '';
   state.last_assistant_message = \`$LAST_MSG\`.substring(0, 500);
   state.last_updated = '$TIMESTAMP';
 
