@@ -189,8 +189,14 @@ function analyzeTranscript(transcriptPath, model) {
   const totalAllInput = inputTokenReadings.reduce((s, r) => s + r.totalInputTokens, 0);
   const cacheEfficiency = totalAllInput > 0 ? totalCacheRead / totalAllInput : 0;
 
-  // Cost estimation (using total input tokens)
-  const estimatedCostUsd = (latest.totalInputTokens / 1_000_000) * pricePerM;
+  // Cost estimation with per-type token pricing:
+  // cache_read ≈ 10% of input price, cache_creation ≈ 125% of input price
+  const cacheReadPrice = pricePerM * 0.1;
+  const cacheWritePrice = pricePerM * 1.25;
+  const estimatedCostUsd =
+    (latest.inputTokens / 1_000_000) * pricePerM +
+    (latest.cacheReadTokens / 1_000_000) * cacheReadPrice +
+    (latest.cacheCreationTokens / 1_000_000) * cacheWritePrice;
 
   return {
     tokens_used: tokensUsed,
