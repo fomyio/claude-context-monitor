@@ -1,0 +1,41 @@
+{
+  "relevance_eval_enabled": true,
+  "relevance_eval_threshold_pct": 45,
+  "anthropic_api_key_cmd": "cat ~/.anthropic_key",
+  "context_limits": {
+    "claude-opus-4-6": 200000,
+    "claude-opus-4-5": 200000,
+    "claude-opus-4": 200000,
+    "claude-sonnet-4-6": 200000,
+    "claude-sonnet-4-5": 200000,
+    "claude-haiku-4-5": 200000
+  },
+  "model_prices_per_million_input": {
+    "claude-opus-4-6": 15.00,
+    "claude-opus-4-5": 15.00,
+    "claude-opus-4": 15.00,
+    "claude-sonnet-4-6": 3.00,
+    "claude-sonnet-4-5": 3.00,
+    "claude-haiku-4-5": 0.80
+  },
+  "notify_thresholds": {
+    "info": 70,
+    "warning": 85,
+    "critical": 95
+  },
+  "compact_score_thresholds": {
+    "suggest": 26,
+    "warn": 46,
+    "urgent": 66,
+    "block": 80
+  },
+  "block_on_critical": false,
+  "auto_compact_enabled": false,
+  "auto_compact_threshold_score": 85,
+  "tmux_status_enabled": false,
+  "tmux_status_file": "/tmp/claude-ctx-status",
+  "fingerprint_max_turns": 5,
+  "state_dir": "~/.claude/context-monitor-state",
+  "claude_md_bloat_threshold_pct": 15,
+  "burn_rate_window_turns": 4
+}

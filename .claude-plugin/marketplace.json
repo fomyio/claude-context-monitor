@@ -1,0 +1,12 @@
+{
+  "name": "claude-context-monitor",
+  "description": "Plugins for monitoring and managing Claude Code context window usage.",
+  "plugins": [
+    {
+      "name": "context-monitor",
+      "description": "Real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions.",
+      "version": "1.0.0",
+      "path": "."
+    }
+  ]
+}

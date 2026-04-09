@@ -1,0 +1,14 @@
+{
+  "name": "context-monitor",
+  "description": "Real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions for Claude Code.",
+  "version": "1.0.0",
+  "author": {
+    "name": "joeVenner"
+  },
+  "keywords": [
+    "context-window",
+    "token-tracker",
+    "compact",
+    "hooks"
+  ]
+}

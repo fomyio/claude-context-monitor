@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "~/.claude/plugins/context-monitor/hooks/session-init.sh"
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "~/.claude/plugins/context-monitor/hooks/check.sh"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "~/.claude/plugins/context-monitor/hooks/update-state.sh",
+        "background": true
+      }]
+    }],
+    "PreCompact": [{
+      "hooks": [{
+        "type": "command",
+        "command": "~/.claude/plugins/context-monitor/hooks/pre-compact.sh"
+      }]
+    }],
+    "PostCompact": [{
+      "hooks": [{
+        "type": "command",
+        "command": "~/.claude/plugins/context-monitor/hooks/post-compact.sh"
+      }]
+    }]
+  }
+}

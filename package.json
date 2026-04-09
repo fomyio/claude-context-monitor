@@ -1,0 +1,27 @@
+{
+  "name": "claude-context-monitor",
+  "version": "1.0.0",
+  "description": "Claude Code plugin for real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions.",
+  "main": "src/dashboard.js",
+  "bin": {
+    "context-monitor": "src/dashboard.js"
+  },
+  "scripts": {
+    "report": "node src/dashboard.js",
+    "test": "node tests/run-tests.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "context-window",
+    "token-tracker",
+    "hooks"
+  ],
+  "license": "MIT"
+}
