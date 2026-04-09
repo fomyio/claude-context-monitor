@@ -3,8 +3,11 @@
   "description": "Real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions for Claude Code.",
   "version": "1.0.0",
   "author": {
-    "name": "joeVenner"
+    "name": "Mosaab",
+    "url": "https://fomy.io"
   },
+  "homepage": "https://github.com/fomyio/claude-context-monitor",
+  "repository": "https://github.com/fomyio/claude-context-monitor.git",
   "keywords": [
     "context-window",
     "token-tracker",

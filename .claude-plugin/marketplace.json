@@ -1,12 +1,23 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-context-monitor",
   "description": "Plugins for monitoring and managing Claude Code context window usage.",
+  "owner": {
+    "name": "Mosaab",
+    "email": "hello@fomy.io"
+  },
   "plugins": [
     {
       "name": "context-monitor",
       "description": "Real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions.",
       "version": "1.0.0",
-      "path": "."
+      "author": {
+        "name": "Mosaab",
+        "email": "hello@fomy.io"
+      },
+      "source": "./",
+      "category": "productivity",
+      "strict": false
     }
   ]
 }
