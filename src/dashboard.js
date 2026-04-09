@@ -72,12 +72,16 @@ if (transcript_path) {
 // If no transcript or analysis returned nothing, use the latest token_history entry
 if (!stats.tokens_used && token_history.length > 0) {
   const last = token_history[token_history.length - 1];
+  // Derive tokens_max from usage_pct and tokens_used when possible
+  const derivedMax = (last.usage_pct > 0 && last.tokens_used > 0)
+    ? Math.round((last.tokens_used / last.usage_pct) * 100)
+    : (config.context_limits || {})[model] || 200000;
   stats = {
     tokens_used: last.tokens_used || 0,
-    tokens_max: 200000,
+    tokens_max: derivedMax,
     usage_pct: last.usage_pct || 0,
     burn_rate: last.burn_rate || 0,
-    turns_left: last.burn_rate > 0 ? Math.floor((200000 - (last.tokens_used || 0)) / last.burn_rate) : null,
+    turns_left: last.burn_rate > 0 ? Math.floor((derivedMax - (last.tokens_used || 0)) / last.burn_rate) : null,
     estimated_cost_usd: 0,
     cache_efficiency: 0,
   };
@@ -88,7 +92,7 @@ const usagePct = stats.usage_pct || 0;
 const cost = stats.estimated_cost_usd || 0;
 const eff = stats.cache_efficiency || 0;
 const burnRate = stats.burn_rate || 0;
-const turnsLeft = stats.turns_left !== null ? stats.turns_left : '?';
+const turnsLeft = stats.turns_left ?? '?';
 
 const uptimeMs = started_at ? Date.now() - new Date(started_at).getTime() : 0;
 const uptimeMin = uptimeMs > 0 ? Math.round(uptimeMs / 60000) : '?';
