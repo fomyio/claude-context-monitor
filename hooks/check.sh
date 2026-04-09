@@ -176,6 +176,12 @@ BELOW_THRESHOLD="$(node -e "
 
 if [ "$BELOW_THRESHOLD" = "true" ] || [ "$EVAL_ENABLED" = "false" ]; then
   echo "$TOKEN_BAR"
+  # At high usage, instruct Claude to mention it even without advisor
+  ABOVE_WARN="$(node -e "console.log(parseFloat('$USAGE_PCT') >= parseFloat('$WARN_PCT') ? 'true' : 'false');" 2>/dev/null || echo 'false')"
+  if [ "$ABOVE_WARN" = "true" ]; then
+    echo ""
+    echo "IMPORTANT: Context is at ${USAGE_PCT}%. Mention this to the user and suggest running /compact soon."
+  fi
   exit 0
 fi
 
@@ -214,6 +220,9 @@ COMPACT_SCORE="$(echo "$ADVISOR_RESULT" | node -e "
 echo "$TOKEN_BAR"
 if [ -n "$ADVISOR_OUTPUT" ]; then
   echo "$ADVISOR_OUTPUT"
+  # Force Claude to relay the warning to the user
+  echo ""
+  echo "IMPORTANT: You MUST inform the user about the context status above. Include the recommendation in your response — the user cannot see hook output directly."
 fi
 
 # Block if score is critical and block_on_critical is enabled or action=block
