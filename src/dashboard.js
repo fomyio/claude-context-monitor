@@ -60,21 +60,42 @@ const {
   transcript_path,
   total_turns,
   topics = [],
-  claude_md_tokens = 0
+  claude_md_tokens = 0,
+  token_history = []
 } = state;
 
-// Get latest stats
-const stats = analyzeTranscript(transcript_path, model) || {};
+// Get latest stats — try live transcript first, fall back to last recorded state
+let stats = {};
+if (transcript_path) {
+  stats = analyzeTranscript(transcript_path, model) || {};
+}
+// If no transcript or analysis returned nothing, use the latest token_history entry
+if (!stats.tokens_used && token_history.length > 0) {
+  const last = token_history[token_history.length - 1];
+  // Derive tokens_max from usage_pct and tokens_used when possible
+  const derivedMax = (last.usage_pct > 0 && last.tokens_used > 0)
+    ? Math.round((last.tokens_used / last.usage_pct) * 100)
+    : (config.context_limits || {})[model] || 200000;
+  stats = {
+    tokens_used: last.tokens_used || 0,
+    tokens_max: derivedMax,
+    usage_pct: last.usage_pct || 0,
+    burn_rate: last.burn_rate || 0,
+    turns_left: last.burn_rate > 0 ? Math.floor((derivedMax - (last.tokens_used || 0)) / last.burn_rate) : null,
+    estimated_cost_usd: 0,
+    cache_efficiency: 0,
+  };
+}
 const usedK = Math.round((stats.tokens_used || 0) / 1000);
 const maxK = Math.round((stats.tokens_max || 200000) / 1000);
 const usagePct = stats.usage_pct || 0;
 const cost = stats.estimated_cost_usd || 0;
 const eff = stats.cache_efficiency || 0;
 const burnRate = stats.burn_rate || 0;
-const turnsLeft = stats.turns_left !== null ? stats.turns_left : '?';
+const turnsLeft = stats.turns_left ?? '?';
 
-const uptimeMs = Date.now() - new Date(started_at).getTime();
-const uptimeMin = Math.round(uptimeMs / 60000);
+const uptimeMs = started_at ? Date.now() - new Date(started_at).getTime() : 0;
+const uptimeMin = uptimeMs > 0 ? Math.round(uptimeMs / 60000) : '?';
 
 // Draw bar
 const BAR_WIDTH = 40;
@@ -87,7 +108,7 @@ let topicsStr = topics.map(t => t.label).join(' → ');
 if (!topicsStr) topicsStr = 'General';
 
 console.log(`
-Session: ${total_turns} turns | ${uptimeMin} min | ${model}
+Session: ${total_turns} turns | ${uptimeMin} min | ${model || 'unknown'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Context:  [${bar}]  ${usagePct}%  (${usedK}K / ${maxK}K)
 Cost:     ~$${cost.toFixed(3)} this session  |  Cache eff: ${Math.round(eff * 100)}%

@@ -72,14 +72,19 @@ if [ "$STATS" = '{}' ] || [ -z "$STATS" ]; then exit 0; fi
 # ── Persist stats to state ────────────────────────────────────────────────────
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+# Sanitise paths that get embedded in JS string literals (strip single quotes)
+SAFE_TRANSCRIPT="${TRANSCRIPT_PATH//\'/}"
+SAFE_STATE_FILE="${STATE_FILE//\'/}"
+SAFE_SESSION_ID="${SESSION_ID//\'/}"
+
 node -e "
   const fs = require('fs');
   const stats = $STATS;
   let state;
   try {
-    state = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
+    state = JSON.parse(fs.readFileSync('$SAFE_STATE_FILE', 'utf8'));
   } catch(_) {
-    state = { session_id: '$SESSION_ID', token_history: [], topics: [], last_compact_at_turn: 0, total_turns: 0, compact_events: [] };
+    state = { session_id: '$SAFE_SESSION_ID', token_history: [], topics: [], last_compact_at_turn: 0, total_turns: 0, compact_events: [] };
   }
 
   // Append to token history
@@ -98,10 +103,12 @@ node -e "
   }
 
   state.total_turns = stats.total_turns;
+  state.transcript_path = '$SAFE_TRANSCRIPT';
+  state.model = stats.model || state.model || '';
   state.last_assistant_message = \`$LAST_MSG\`.substring(0, 500);
   state.last_updated = '$TIMESTAMP';
 
-  fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
+  fs.writeFileSync('$SAFE_STATE_FILE', JSON.stringify(state, null, 2));
 " 2>/dev/null || true
 
 # ── Tmux status bar integration (opt-in) ─────────────────────────────────────
