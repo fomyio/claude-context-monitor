@@ -1,0 +1,44 @@
+# ── Area labels (by file path) ────────────────────────────────────
+
+"area: hooks":
+  - changed-files:
+      - any-glob-to-any-file: "hooks/**"
+
+"area: core":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/analyze.js"
+          - "src/advisor.js"
+          - "src/fingerprint.js"
+
+"area: ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/dashboard.js"
+          - "src/notify.sh"
+
+"area: plugin":
+  - changed-files:
+      - any-glob-to-any-file: ".claude-plugin/**"
+
+# ── Infra / CI labels ────────────────────────────────────────────
+
+"ci/cd":
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "package-lock.json"
+
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+
+"configuration":
+  - changed-files:
+      - any-glob-to-any-file: "config.json"
