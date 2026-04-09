@@ -106,8 +106,10 @@ function analyzeTranscript(transcriptPath, model) {
   const pricePerM = getModelPrice(model);
 
   // ── Collect per-turn input token readings ─────────────────────────────────
-  // We want the input_tokens from each assistant turn (the running total that Claude sees)
-  const inputTokenReadings = []; // { turn, inputTokens, cacheReadTokens, cacheCreationTokens }
+  // Total context = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+  // With prompt caching, input_tokens only reports the uncached portion (often 0 or 1),
+  // while the bulk of context sits in cache_read_input_tokens.
+  const inputTokenReadings = []; // { turn, totalInputTokens, inputTokens, cacheReadTokens, cacheCreationTokens }
   let turnIndex = 0;
   let latestAssistantContent = null;
   let totalOutputTokensEstimate = 0;
@@ -121,11 +123,13 @@ function analyzeTranscript(transcriptPath, model) {
       const inputTok = usage.input_tokens || 0;
       const cacheRead = usage.cache_read_input_tokens || 0;
       const cacheCreate = usage.cache_creation_input_tokens || 0;
+      const totalInput = inputTok + cacheRead + cacheCreate;
 
-      if (inputTok > 0) {
+      if (totalInput > 0) {
         turnIndex++;
         inputTokenReadings.push({
           turn: turnIndex,
+          totalInputTokens: totalInput,
           inputTokens: inputTok,
           cacheReadTokens: cacheRead,
           cacheCreationTokens: cacheCreate,
@@ -159,16 +163,17 @@ function analyzeTranscript(transcriptPath, model) {
   }
 
   const latest = inputTokenReadings[inputTokenReadings.length - 1];
-  const tokensUsed = latest.inputTokens + totalOutputTokensEstimate;
+  // Total context = all input tokens (uncached + cache_read + cache_creation) + output estimate
+  const tokensUsed = latest.totalInputTokens + totalOutputTokensEstimate;
   const usagePct = Math.min(100, (tokensUsed / tokensMax) * 100);
 
-  // Burn rate: average delta of input_tokens across last N turns
+  // Burn rate: average delta of total input tokens across last N turns
   const window = inputTokenReadings.slice(-BURN_RATE_WINDOW);
   let burnRate = 0;
   if (window.length >= 2) {
     const deltas = [];
     for (let i = 1; i < window.length; i++) {
-      const delta = window[i].inputTokens - window[i - 1].inputTokens;
+      const delta = window[i].totalInputTokens - window[i - 1].totalInputTokens;
       if (delta > 0) deltas.push(delta);
     }
     if (deltas.length > 0) {
@@ -179,20 +184,17 @@ function analyzeTranscript(transcriptPath, model) {
   const tokensRemaining = Math.max(0, tokensMax - tokensUsed);
   const turnsLeft = burnRate > 0 ? Math.floor(tokensRemaining / burnRate) : null;
 
-  // Cache efficiency
+  // Cache efficiency: how much of total input is served from cache
   const totalCacheRead = inputTokenReadings.reduce((s, r) => s + r.cacheReadTokens, 0);
-  const totalCacheCreate = inputTokenReadings.reduce((s, r) => s + r.cacheCreationTokens, 0);
-  const totalInput = inputTokenReadings.reduce((s, r) => s + r.inputTokens, 0);
-  const cacheEfficiency = (totalInput + totalCacheCreate) > 0
-    ? totalCacheRead / (totalInput + totalCacheCreate)
-    : 0;
+  const totalAllInput = inputTokenReadings.reduce((s, r) => s + r.totalInputTokens, 0);
+  const cacheEfficiency = totalAllInput > 0 ? totalCacheRead / totalAllInput : 0;
 
-  // Cost estimation (input only — output pricing is complex and model-specific)
-  const estimatedCostUsd = (latest.inputTokens / 1_000_000) * pricePerM;
+  // Cost estimation (using total input tokens)
+  const estimatedCostUsd = (latest.totalInputTokens / 1_000_000) * pricePerM;
 
   return {
     tokens_used: tokensUsed,
-    tokens_input: latest.inputTokens,
+    tokens_input: latest.totalInputTokens,
     tokens_output_est: totalOutputTokensEstimate,
     tokens_max: tokensMax,
     usage_pct: Math.round(usagePct * 10) / 10,
