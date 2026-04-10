@@ -74,4 +74,17 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   if (cacheEff !== null) parts.push('eff ' + cacheEff + '%');
 
   console.log(parts.join(' · '));
+
+  // Persist the real context limit from Claude Code into state so analyze.js can use it
+  if (sessionId && limit > 0) {
+    try {
+      const stateFile = stateDir + '/' + sessionId + '.json';
+      let state = {};
+      try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch(_) {}
+      if (state.context_limit !== limit) {
+        state.context_limit = limit;
+        fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+      }
+    } catch(_) {}
+  }
 " 2>/dev/null || echo "CTX ?%"
