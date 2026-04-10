@@ -44,7 +44,7 @@ cat | STATE_DIR="$STATE_DIR" node -e "
         if (burnRate > 0) {
           turnsLeft = String(Math.floor((limit - used) / burnRate));
         }
-        if (last.cache_efficiency != null) {
+        if (last.cache_efficiency != null && last.cache_efficiency > 0) {
           cacheEff = Math.round(last.cache_efficiency * 100);
         }
       }
@@ -53,7 +53,7 @@ cat | STATE_DIR="$STATE_DIR" node -e "
 
   // Progress bar — █ filled, ░ empty (matches dashboard style)
   const BAR_WIDTH = 20;
-  const filled = Math.round(BAR_WIDTH * pct / 100);
+  const filled = Math.min(BAR_WIDTH, Math.round(BAR_WIDTH * pct / 100));
   const empty = Math.max(0, BAR_WIDTH - filled);
   const bar = '[' + '\u2588'.repeat(filled) + '\u2591'.repeat(empty) + ']';
 
