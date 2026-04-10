@@ -127,8 +127,8 @@ if [ -f "\$PLUGIN_SCRIPT" ]; then
   exec bash "\$PLUGIN_SCRIPT"
 else
   # Plugin removed — remove statusLine from settings.json (only if ours) and self-destruct
-  node -e 'const fs=require("fs"),p=require("path"),f=p.join(process.env.HOME,".claude/settings.json");try{const s=JSON.parse(fs.readFileSync(f,"utf8"));if(s.statusLine&&s.statusLine.command==="~/.claude/statusline.sh"){delete s.statusLine;fs.writeFileSync(f,JSON.stringify(s,null,2));}}catch(_){}' 2>/dev/null
-  rm -f "\$0"
+  # Guard rm with && so wrapper only deletes itself when settings.json was actually cleaned up
+  node -e 'const fs=require("fs"),p=require("path"),f=p.join(process.env.HOME,".claude/settings.json");try{const s=JSON.parse(fs.readFileSync(f,"utf8"));if(s.statusLine&&s.statusLine.command==="~/.claude/statusline.sh"){delete s.statusLine;fs.writeFileSync(f,JSON.stringify(s,null,2));}process.exit(0);}catch(_){process.exit(1);}' 2>/dev/null && rm -f "\$0"
 fi
 EOF
     chmod +x "$wrapper_path"
