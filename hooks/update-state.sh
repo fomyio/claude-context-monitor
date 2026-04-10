@@ -95,6 +95,7 @@ node -e "
     tokens_input: stats.tokens_input,
     usage_pct: stats.usage_pct,
     burn_rate: stats.burn_rate,
+    cache_efficiency: stats.cache_efficiency ?? 0,
   });
 
   // Keep history capped at 50 entries
