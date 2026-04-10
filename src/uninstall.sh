@@ -10,6 +10,28 @@ WRAPPER="$HOME/.claude/statusline.sh"
 
 echo "[context-monitor] Cleaning up plugin artifacts..."
 
+# Remove orphaned cache directories left by Claude Code's plugin manager
+CACHE_DIR="$HOME/.claude/plugins/cache/claude-context-monitor"
+if [ -d "$CACHE_DIR" ]; then
+  orphaned_count=0
+  shopt -s nullglob
+  orphaned_count=0
+  for dir in "$CACHE_DIR"/*/; do
+    for ver in "$dir"*/; do
+      if [ -f "$ver/.orphaned_at" ]; then
+        rm -rf "$ver"
+        orphaned_count=$((orphaned_count + 1))
+      fi
+    done
+  done
+  shopt -u nullglob
+  if [ "$orphaned_count" -gt 0 ]; then
+    echo "  Removed $orphaned_count orphaned cache directory(ies)"
+  else
+    echo "  No orphaned cache directories found"
+  fi
+fi
+
 # Remove statusLine from settings.json (only if it points to our wrapper),
 # then only remove the wrapper if settings.json was actually cleaned up.
 # This prevents a stale statusLine entry pointing to a deleted wrapper file.
