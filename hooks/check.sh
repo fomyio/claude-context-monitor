@@ -212,8 +212,25 @@ COMPACT_SCORE="$(echo "$ADVISOR_RESULT" | node -e "
 
 # Print token bar + advisor output to stdout (injected into Claude's context)
 echo "$TOKEN_BAR"
+WARN_SCORE_THRESHOLD="$(node -e "
+  const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));
+  console.log(c.compact_score_thresholds?.warn ?? 46);
+" 2>/dev/null || echo 46)"
+
 if [ -n "$ADVISOR_OUTPUT" ]; then
   echo "$ADVISOR_OUTPUT"
+  # Only relay when compact score warrants a warning (float-safe comparison)
+  if node -e "process.exit(parseFloat('$COMPACT_SCORE') >= parseFloat('$WARN_SCORE_THRESHOLD') ? 0 : 1);" 2>/dev/null; then
+    echo ""
+    echo "IMPORTANT: You MUST inform the user about the context status above. Include the recommendation in your response — the user cannot see hook output directly."
+  fi
+else
+  # Advisor ran but produced no output — still relay at high token usage
+  ABOVE_WARN="$(node -e "console.log(parseFloat('$USAGE_PCT') >= parseFloat('$WARN_PCT') ? 'true' : 'false');" 2>/dev/null || echo 'false')"
+  if [ "$ABOVE_WARN" = "true" ]; then
+    echo ""
+    echo "IMPORTANT: Context is at ${USAGE_PCT}%. Mention this to the user and suggest running /compact soon."
+  fi
 fi
 
 # Block if score is critical and block_on_critical is enabled or action=block
