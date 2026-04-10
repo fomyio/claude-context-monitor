@@ -13,6 +13,9 @@ A Claude Code plugin that watches your context window in real-time, predicts whe
 
 </div>
 
+![ClaudeContextPlugin-ezgif com-optimize](https://github.com/user-attachments/assets/9666a5a8-bede-4493-8a36-34e92b6e1ad8)
+
+
 ---
 
 ## The problem
