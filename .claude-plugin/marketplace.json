@@ -10,7 +10,7 @@
     {
       "name": "context-monitor",
       "description": "Real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": {
         "name": "Mosaab",
         "email": "hello@fomy.io"
