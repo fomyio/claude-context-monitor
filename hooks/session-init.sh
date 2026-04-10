@@ -139,7 +139,11 @@ EOF
     const fs = require('fs'), p = require('path');
     const f = p.join(process.env.HOME, '.claude/settings.json');
     let s = {};
-    try { s = JSON.parse(fs.readFileSync(f, 'utf8')); } catch(_) {}
+    try {
+      s = JSON.parse(fs.readFileSync(f, 'utf8'));
+    } catch(e) {
+      if (e.code !== 'ENOENT') process.exit(0); // malformed JSON — skip to avoid clobbering settings
+    }
     if (!s.statusLine) {
       s.statusLine = { type: 'command', command: '~/.claude/statusline.sh' };
       fs.writeFileSync(f, JSON.stringify(s, null, 2));
