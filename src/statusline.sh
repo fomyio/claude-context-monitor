@@ -47,22 +47,26 @@ cat | STATE_DIR="$STATE_DIR" node -e "
     } catch(_) {}
   }
 
-  // Pick color indicator
-  let icon = '\u2713';  // checkmark
-  if (pct >= 85) icon = '\u26a0';      // warning
-  else if (pct >= 70) icon = '\u25cf';  // dot
+  // Progress bar
+  const BAR_WIDTH = 20;
+  const filled = Math.round(BAR_WIDTH * pct / 100);
+  const empty = Math.max(0, BAR_WIDTH - filled);
+  const bar = '\u2580'.repeat(filled) + '\u2581'.repeat(empty);
+
+  // Color indicator
+  let icon;
+  if (pct >= 85) icon = '\uD83D\uDD34';       // 🔴
+  else if (pct >= 70) icon = '\uD83D\uDFE1';  // 🟡
+  else icon = '\uD83D\uDFE2';                  // 🟢
 
   const usedK = Math.round(used / 1000);
   const limitK = Math.round(limit / 1000);
-  const costStr = cost > 0 ? cost.toFixed(3) : '0.00';
+  const costStr = '\$' + (cost > 0 ? cost.toFixed(3) : '0.00');
 
-  const parts = [
-    'CTX ' + pct.toFixed(0) + '%',
-    usedK + 'K/' + limitK + 'K',
-  ];
-
+  const parts = [icon + ' ' + bar + ' ' + pct.toFixed(0) + '%'];
+  parts.push(usedK + 'K/' + limitK + 'K');
   if (turnsLeft !== '?') parts.push('~' + turnsLeft + ' turns');
-  parts.push('\$' + costStr);
+  parts.push(costStr);
 
-  console.log(icon + ' ' + parts.join(' | '));
+  console.log(parts.join(' · '));
 " 2>/dev/null || echo "CTX ?%"
