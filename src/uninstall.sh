@@ -14,6 +14,8 @@ echo "[context-monitor] Cleaning up plugin artifacts..."
 CACHE_DIR="$HOME/.claude/plugins/cache/claude-context-monitor"
 if [ -d "$CACHE_DIR" ]; then
   orphaned_count=0
+  shopt -s nullglob
+  orphaned_count=0
   for dir in "$CACHE_DIR"/*/; do
     for ver in "$dir"*/; do
       if [ -f "$ver/.orphaned_at" ]; then
@@ -22,6 +24,7 @@ if [ -d "$CACHE_DIR" ]; then
       fi
     done
   done
+  shopt -u nullglob
   if [ "$orphaned_count" -gt 0 ]; then
     echo "  Removed $orphaned_count orphaned cache directory(ies)"
   else
