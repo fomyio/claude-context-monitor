@@ -10,15 +10,17 @@ WRAPPER="$HOME/.claude/statusline.sh"
 
 echo "[context-monitor] Cleaning up plugin artifacts..."
 
-# Remove statusLine from settings.json
+# Remove statusLine from settings.json (only if it points to our wrapper)
 if [ -f "$SETTINGS_FILE" ]; then
   node -e "
     const fs = require('fs');
     const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf8'));
-    if (s.statusLine) {
+    if (s.statusLine && s.statusLine.command === '~/.claude/statusline.sh') {
       delete s.statusLine;
       fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(s, null, 2));
       console.log('  Removed statusLine from settings.json');
+    } else if (s.statusLine) {
+      console.log('  statusLine exists but points elsewhere — leaving it untouched');
     } else {
       console.log('  statusLine not found in settings.json (already clean)');
     }

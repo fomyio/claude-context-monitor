@@ -32,6 +32,7 @@
   "block_on_critical": false,
   "auto_compact_enabled": false,
   "auto_compact_threshold_score": 85,
+  "statusline_enabled": true,
   "tmux_status_enabled": false,
   "tmux_status_file": "/tmp/claude-ctx-status",
   "fingerprint_max_turns": 5,
