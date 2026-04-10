@@ -109,6 +109,13 @@ node -e "
   state.last_assistant_message = \`$LAST_MSG\`.substring(0, 500);
   state.last_updated = '$TIMESTAMP';
 
+  // Preserve context_limit written by statusline.sh — re-read before write to
+  // avoid clobbering it in the concurrent read-modify-write race
+  try {
+    const fresh = JSON.parse(fs.readFileSync('$SAFE_STATE_FILE', 'utf8'));
+    if (fresh.context_limit) state.context_limit = fresh.context_limit;
+  } catch(_) {}
+
   fs.writeFileSync('$SAFE_STATE_FILE', JSON.stringify(state, null, 2));
 " 2>/dev/null || true
 

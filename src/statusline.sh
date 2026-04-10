@@ -83,6 +83,7 @@ cat | STATE_DIR="$STATE_DIR" node -e "
       try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch(_) {}
       if (state.context_limit !== limit) {
         state.context_limit = limit;
+        fs.mkdirSync(stateDir, { recursive: true });
         fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
       }
     } catch(_) {}
