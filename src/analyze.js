@@ -38,11 +38,19 @@ const BURN_RATE_WINDOW = config.burn_rate_window_turns || 4;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getContextLimit(model) {
+function getContextLimit(model, sessionId) {
+  // 1. State file — written by statusline.sh with Claude Code's real limit (ground truth)
+  if (sessionId) {
+    try {
+      const stateDirCfg = config.state_dir || '~/.claude/context-monitor-state';
+      const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
+      const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
+      if (state.context_limit > 0) return state.context_limit;
+    } catch (_) {}
+  }
+  // 2. config.json static table
   if (!model) return 200000;
-  // Exact match
   if (CONTEXT_LIMITS[model]) return CONTEXT_LIMITS[model];
-  // Prefix match
   for (const [key, val] of Object.entries(CONTEXT_LIMITS)) {
     if (model.startsWith(key) || key.startsWith(model)) return val;
   }
@@ -77,7 +85,7 @@ function estimateOutputTokens(content) {
 
 // ── Main parser ───────────────────────────────────────────────────────────────
 
-function analyzeTranscript(transcriptPath, model) {
+function analyzeTranscript(transcriptPath, model, sessionId) {
   if (!transcriptPath || !fs.existsSync(transcriptPath)) {
     return null;
   }
@@ -102,7 +110,7 @@ function analyzeTranscript(transcriptPath, model) {
     }
   }
 
-  const tokensMax = getContextLimit(model);
+  const tokensMax = getContextLimit(model, sessionId);
   const pricePerM = getModelPrice(model);
 
   // ── Collect per-turn input token readings ─────────────────────────────────
@@ -224,7 +232,7 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  const result = analyzeTranscript(transcriptPath, model);
+  const result = analyzeTranscript(transcriptPath, model, sessionId);
   if (!result) {
     console.error(`Cannot read transcript: ${transcriptPath}`);
     process.exit(1);

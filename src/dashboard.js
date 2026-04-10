@@ -67,7 +67,7 @@ const {
 // Get latest stats — try live transcript first, fall back to last recorded state
 let stats = {};
 if (transcript_path) {
-  stats = analyzeTranscript(transcript_path, model) || {};
+  stats = analyzeTranscript(transcript_path, model, session_id) || {};
 }
 // If no transcript or analysis returned nothing, use the latest token_history entry
 if (!stats.tokens_used && token_history.length > 0) {
