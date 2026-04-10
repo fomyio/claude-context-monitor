@@ -220,9 +220,12 @@ COMPACT_SCORE="$(echo "$ADVISOR_RESULT" | node -e "
 echo "$TOKEN_BAR"
 if [ -n "$ADVISOR_OUTPUT" ]; then
   echo "$ADVISOR_OUTPUT"
-  # Force Claude to relay the warning to the user
-  echo ""
-  echo "IMPORTANT: You MUST inform the user about the context status above. Include the recommendation in your response — the user cannot see hook output directly."
+  # Only force Claude to relay when compact score warrants a warning (>= warn threshold)
+  SCORE_ABOVE_WARN="$(node -e "console.log(parseInt('$COMPACT_SCORE') >= parseInt('$(node -e "const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8')); console.log(c.compact_score_thresholds?.warn ?? 46);" 2>/dev/null || echo 46)') ? 'true' : 'false');" 2>/dev/null || echo 'false')"
+  if [ "$SCORE_ABOVE_WARN" = "true" ]; then
+    echo ""
+    echo "IMPORTANT: You MUST inform the user about the context status above. Include the recommendation in your response — the user cannot see hook output directly."
+  fi
 fi
 
 # Block if score is critical and block_on_critical is enabled or action=block

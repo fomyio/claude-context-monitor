@@ -9,18 +9,15 @@ PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pw
 STATE_DIR_CFG="$(node -e "
   try {
     const c=JSON.parse(require('fs').readFileSync('$PLUGIN_DIR/config.json','utf8'));
-    console.log(c.state_dir ?? '~/.claude/context-monitor-state');
-  } catch(_) { console.log('~/.claude/context-monitor-state'); }
-" 2>/dev/null || echo '~/.claude/context-monitor-state')"
+    console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
+  } catch(_) { console.log('~/.claude/plugins/context-monitor/state'); }
+" 2>/dev/null || echo '~/.claude/plugins/context-monitor/state')"
 STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
 
-# Read session JSON from stdin
-INPUT="$(cat)"
-
-# Extract built-in fields from Claude Code
-node -e "
-  const input = $INPUT;
+# Read session JSON from stdin and pipe safely to node (no shell expansion)
+cat | node -e "
   const fs = require('fs');
+  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
 
   const pct = input.context_window?.used_percentage ?? 0;
   const used = input.context_window?.used_tokens ?? 0;
