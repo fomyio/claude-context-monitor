@@ -220,7 +220,7 @@ WARN_SCORE_THRESHOLD="$(node -e "
 if [ -n "$ADVISOR_OUTPUT" ]; then
   echo "$ADVISOR_OUTPUT"
   # Only relay when compact score warrants a warning
-  if [ "$COMPACT_SCORE" -ge "$WARN_SCORE_THRESHOLD" ] 2>/dev/null; then
+  if node -e "process.exit(parseFloat('$COMPACT_SCORE') >= parseFloat('$WARN_SCORE_THRESHOLD') ? 0 : 1);" 2>/dev/null; then
     echo ""
     echo "IMPORTANT: You MUST inform the user about the context status above. Include the recommendation in your response — the user cannot see hook output directly."
   fi
