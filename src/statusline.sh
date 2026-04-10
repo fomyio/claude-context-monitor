@@ -28,9 +28,10 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const cost = input.session?.cost ?? input.session?.cost_usd ?? 0;
   const sessionId = input.session_id ?? '';
 
-  // Try to read plugin state for burn rate / turns left
+  // Try to read plugin state for burn rate / turns left / cache efficiency
   let burnRate = 0;
   let turnsLeft = '?';
+  let cacheEff = null;
   const stateDir = process.env.STATE_DIR;
 
   if (sessionId) {
@@ -43,15 +44,18 @@ cat | STATE_DIR="$STATE_DIR" node -e "
         if (burnRate > 0) {
           turnsLeft = String(Math.floor((limit - used) / burnRate));
         }
+        if (last.cache_efficiency != null) {
+          cacheEff = Math.round(last.cache_efficiency * 100);
+        }
       }
     } catch(_) {}
   }
 
-  // Progress bar
+  // Progress bar — █ filled, ░ empty (matches dashboard style)
   const BAR_WIDTH = 20;
   const filled = Math.round(BAR_WIDTH * pct / 100);
   const empty = Math.max(0, BAR_WIDTH - filled);
-  const bar = '\u2580'.repeat(filled) + '\u2581'.repeat(empty);
+  const bar = '[' + '\u2588'.repeat(filled) + '\u2591'.repeat(empty) + ']';
 
   // Color indicator
   let icon;
@@ -63,10 +67,11 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const limitK = Math.round(limit / 1000);
   const costStr = '\$' + (cost > 0 ? cost.toFixed(3) : '0.00');
 
-  const parts = [icon + ' ' + bar + ' ' + pct.toFixed(0) + '%'];
+  const parts = [icon + ' ' + bar + ' ' + pct.toFixed(1) + '%'];
   parts.push(usedK + 'K/' + limitK + 'K');
   if (turnsLeft !== '?') parts.push('~' + turnsLeft + ' turns');
   parts.push(costStr);
+  if (cacheEff !== null) parts.push('eff ' + cacheEff + '%');
 
   console.log(parts.join(' · '));
 " 2>/dev/null || echo "CTX ?%"
