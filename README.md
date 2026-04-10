@@ -243,7 +243,7 @@ claude-context-monitor/
 ├── config.json              # User-configurable thresholds + settings
 ├── package.json
 ├── hooks/
-│   ├── hooks.json           # Hook registration definitions
+│   ├── settings-snippet.json # Manual install: merge this into settings.json
 │   ├── settings-snippet.json# Manual install: merge this into settings.json
 │   ├── check.sh             # UserPromptSubmit — main orchestrator
 │   ├── session-init.sh      # SessionStart — initialize session state
