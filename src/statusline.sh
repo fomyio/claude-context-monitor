@@ -21,9 +21,11 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
 
   const pct = input.context_window?.used_percentage ?? 0;
-  const used = input.context_window?.used_tokens ?? 0;
   const limit = input.context_window?.limit_tokens ?? 200000;
-  const cost = input.session?.cost ?? 0;
+  // used_tokens may be absent — derive from percentage when missing
+  const used = input.context_window?.used_tokens || Math.round(pct * limit / 100);
+  // cost may live at session.cost or session.cost_usd
+  const cost = input.session?.cost ?? input.session?.cost_usd ?? 0;
   const sessionId = input.session_id ?? '';
 
   // Try to read plugin state for burn rate / turns left

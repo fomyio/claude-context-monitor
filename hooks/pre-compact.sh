@@ -9,10 +9,7 @@ set -euo pipefail
 # The hookSpecificOutput key is merged into the event lifecycle explicitly
 cat << 'EOF'
 {
-  "hookSpecificOutput": {
-    "hookEventName": "PreCompact",
-    "customInstructions": "Context Monitor Policy: When summarizing this session, please explicitly preserve:\n1. All absolute and relative file paths that have been modified or discussed.\n2. Any specific error messages we are currently trying to fix.\n3. Important environment variables, config values, or port numbers.\n4. Output these as a structured list at the top or bottom of your summary."
-  }
+  "systemMessage": "Context Monitor Policy: When summarizing this session, please explicitly preserve:\n1. All absolute and relative file paths that have been modified or discussed.\n2. Any specific error messages we are currently trying to fix.\n3. Important environment variables, config values, or port numbers.\n4. Output these as a structured list at the top or bottom of your summary."
 }
 EOF
 
