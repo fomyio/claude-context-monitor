@@ -15,7 +15,8 @@ STATE_DIR_CFG="$(node -e "
 STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
 
 # Read session JSON from stdin and pipe safely to node (no shell expansion)
-cat | node -e "
+# Pass STATE_DIR via env var to avoid embedding it in a JS string literal
+cat | STATE_DIR="$STATE_DIR" node -e "
   const fs = require('fs');
   const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
 
@@ -28,7 +29,7 @@ cat | node -e "
   // Try to read plugin state for burn rate / turns left
   let burnRate = 0;
   let turnsLeft = '?';
-  const stateDir = '$STATE_DIR';
+  const stateDir = process.env.STATE_DIR;
 
   if (sessionId) {
     try {
