@@ -70,7 +70,7 @@ node -e "
     trigger: '$TRIGGER',
     pre_tokens: preTokens,
     turns_at_compact: state.total_turns,
-    summary_preview: \`$COMPACT_SUMMARY\`.substring(0, 100),
+    summary_preview: fullSummary.substring(0, 100),
   });
 
   // Save full compact summary for carry-forward into next compact prompt.
