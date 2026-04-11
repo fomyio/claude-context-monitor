@@ -17,12 +17,6 @@ SESSION_ID="$(echo "$INPUT" | node -e "
   console.log(d.session_id ?? d.sessionId ?? '');
 " 2>/dev/null || echo '')"
 
-COMPACT_SUMMARY="$(echo "$INPUT" | node -e "
-  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-  const s=d.compact_summary ?? d.summary ?? '';
-  console.log(typeof s === 'string' ? s.substring(0,200) : '');
-" 2>/dev/null || echo '')"
-
 TRIGGER="$(echo "$INPUT" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
   console.log(d.trigger ?? 'manual');
@@ -63,7 +57,11 @@ node -e "
   const history = state.token_history || [];
   const preTokens = history.length > 0 ? history[history.length - 1].tokens_used : 0;
 
-  // Log compact event
+  // Read the full summary from temp file (written by the shell script above)
+  let fullSummary = '';
+  try { fullSummary = fs.readFileSync('$FULL_SUMMARY_FILE', 'utf8').trim(); } catch(_) {}
+
+  // Log compact event (use first 100 chars of summary as preview)
   state.compact_events = state.compact_events || [];
   state.compact_events.push({
     compacted_at: '$TIMESTAMP',
@@ -76,13 +74,10 @@ node -e "
   // Save full compact summary for carry-forward into next compact prompt.
   // This solves cumulative amnesia: each compact preserves key decisions from
   // all previous compacts, not just the current conversation.
-  let fullSummary = '';
-  try { fullSummary = fs.readFileSync('$FULL_SUMMARY_FILE', 'utf8'); } catch(_) {}
+  // Trim at paragraph boundaries to avoid truncating mid-sentence.
   if (fullSummary.length > 0) {
     let summary = fullSummary.substring(0, 3000);
-    const lastBreak = summary.lastIndexOf('
-
-', 2950);
+    const lastBreak = summary.lastIndexOf('\\n\\n', 2950);
     if (lastBreak > 1500) summary = summary.substring(0, lastBreak);
     state.last_compact_summary = summary;
     state.last_compact_timestamp = '$TIMESTAMP';
