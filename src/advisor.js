@@ -70,7 +70,7 @@ function getApiKey() {
 }
 
 function detectTaskCompletion(lastAssistantMsg) {
-  if (!lastAssistantMsg) return { complete: false, pts: 0 };
+  if (!lastAssistantMsg) return { status: 'ongoing', pts: 0 };
   
   const COMPLETION_PATTERNS = [
     /tests? (pass|passing|passed)/i,
@@ -216,12 +216,13 @@ async function main() {
   }
 
   // 6. Topic boundary tracking
-  if (evalResult && evalResult.label === 'unrelated' && stateFile) {
+  if (evalResult && (evalResult.label === 'unrelated' || evalResult.label === 'drifted') && stateFile) {
     try {
       state.topics = state.topics || [];
       state.topics.push({
         turn: state.total_turns + 1,
-        label: evalResult.reason
+        label: evalResult.reason,
+        shift_type: evalResult.label   // 'unrelated' | 'drifted'
       });
       fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
     } catch (_) {}

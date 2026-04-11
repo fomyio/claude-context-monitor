@@ -13,6 +13,9 @@ A Claude Code plugin that watches your context window in real-time, predicts whe
 
 </div>
 
+![ClaudeContextPlugin-ezgif com-optimize](https://github.com/user-attachments/assets/9666a5a8-bede-4493-8a36-34e92b6e1ad8)
+
+
 ---
 
 ## The problem
@@ -178,7 +181,6 @@ pre-compact.sh (before each compact)
 ```
 
 ---
-
 ## Installation
 
 ### Plugin system (recommended)
@@ -309,7 +311,7 @@ claude-context-monitor/
 ├── config.json              # User-configurable thresholds + settings
 ├── package.json
 ├── hooks/
-│   ├── hooks.json           # Hook registration definitions
+│   ├── settings-snippet.json # Manual install: merge this into settings.json
 │   ├── settings-snippet.json# Manual install: merge this into settings.json
 │   ├── check.sh             # UserPromptSubmit — main orchestrator
 │   ├── session-init.sh      # SessionStart — initialize session state

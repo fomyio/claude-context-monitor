@@ -112,7 +112,8 @@ node -e "
     lines.push('--- TOPIC HISTORY ---');
     lines.push('Topic shifts detected during this session:');
     topics.forEach((t, i) => {
-      lines.push(\`  [\${i + 1}] Turn \${t.turn}: \${t.label}\`);
+      const typeTag = t.shift_type ? \` [\${t.shift_type}]\` : '';
+      lines.push(\`  [\${i + 1}] Turn \${t.turn}\${typeTag}: \${t.label}\`);
     });
     lines.push('');
 
