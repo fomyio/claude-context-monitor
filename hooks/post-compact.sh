@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hooks/post-compact.sh — PostCompact hook
 # Reads PostCompact JSON from stdin, resets token history, logs compact event,
-# and sends a desktop notification.
+# saves compact summary for carry-forward, and sends a desktop notification.
 
 set -euo pipefail
 
@@ -42,7 +42,17 @@ if [ ! -f "$STATE_FILE" ]; then exit 0; fi
 
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# ── Update state: log compact event, reset token history ─────────────────────
+# ── Save full summary to temp file for carry-forward ──────────────────────────
+# Extract the full (non-truncated) summary from the input JSON and write to a
+# temp file so the node block below can read it without shell escaping issues.
+FULL_SUMMARY_FILE="$(mktemp)"
+echo "$INPUT" | node -e "
+  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  const s=d.compact_summary ?? d.summary ?? '';
+  process.stdout.write(typeof s === 'string' ? s : '');
+" > "$FULL_SUMMARY_FILE" 2>/dev/null || true
+
+# ── Update state: log compact event, save summary, reset token history ────────
 node -e "
   const fs = require('fs');
   let state;
@@ -63,12 +73,26 @@ node -e "
     summary_preview: \`$COMPACT_SUMMARY\`.substring(0, 100),
   });
 
+  // Save full compact summary for carry-forward into next compact prompt.
+  // This solves cumulative amnesia: each compact preserves key decisions from
+  // all previous compacts, not just the current conversation.
+  let fullSummary = '';
+  try { fullSummary = fs.readFileSync('$FULL_SUMMARY_FILE', 'utf8'); } catch(_) {}
+  if (fullSummary.length > 0) {
+    state.last_compact_summary = fullSummary.substring(0, 3000);
+    state.last_compact_timestamp = '$TIMESTAMP';
+    state.last_compact_turn = state.total_turns;
+  }
+
   // Reset token history — context was freed
   state.token_history = [];
   state.last_compact_at_turn = state.total_turns;
 
   fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
 " 2>/dev/null || true
+
+# Clean up temp file
+rm -f "$FULL_SUMMARY_FILE" 2>/dev/null || true
 
 # ── Send desktop notification ─────────────────────────────────────────────────
 bash "$NOTIFY" "info" "🧹 Compact Complete" "Context freed! Session continues fresh. (trigger: $TRIGGER)" 2>/dev/null || true

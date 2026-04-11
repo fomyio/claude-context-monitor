@@ -227,6 +227,23 @@ async function main() {
     } catch (_) {}
   }
 
+  // 7. Save active task state for smart compact instructions
+  // This data is used by pre-compact.sh to inject dynamic context into the
+  // compact prompt — telling Claude what to keep, what to drop, and whether
+  // previous tasks are complete.
+  if (stateFile) {
+    try {
+      state.active_task = {
+        completion_status: completion.status, // 'complete' | 'partial' | 'ongoing'
+        topic_label: evalResult ? evalResult.reason : null,
+        topic_relevance: evalResult ? evalResult.label : null, // 'related' | 'drifted' | 'unrelated'
+        compact_score: totalScore,
+        updated_at: new Date().toISOString(),
+      };
+      fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+    } catch (_) {}
+  }
+
   console.log(JSON.stringify({
     compact_score: totalScore,
     action,

@@ -53,7 +53,11 @@ const state = {
   total_turns: 0,
   last_assistant_message: '',
   claude_md_tokens: 0,
-  compact_events: []
+  compact_events: [],
+  last_compact_summary: '',
+  last_compact_timestamp: null,
+  last_compact_turn: null,
+  active_task: null
 };
 fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
 " 2>/dev/null
