@@ -40,6 +40,7 @@ TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 # Extract the full (non-truncated) summary from the input JSON and write to a
 # temp file so the node block below can read it without shell escaping issues.
 FULL_SUMMARY_FILE="$(mktemp)"
+trap "rm -f '$FULL_SUMMARY_FILE'" EXIT
 echo "$INPUT" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
   const s=d.compact_summary ?? d.summary ?? '';
