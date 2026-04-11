@@ -79,7 +79,12 @@ node -e "
   let fullSummary = '';
   try { fullSummary = fs.readFileSync('$FULL_SUMMARY_FILE', 'utf8'); } catch(_) {}
   if (fullSummary.length > 0) {
-    state.last_compact_summary = fullSummary.substring(0, 3000);
+    let summary = fullSummary.substring(0, 3000);
+    const lastBreak = summary.lastIndexOf('
+
+', 2950);
+    if (lastBreak > 1500) summary = summary.substring(0, lastBreak);
+    state.last_compact_summary = summary;
     state.last_compact_timestamp = '$TIMESTAMP';
     state.last_compact_turn = state.total_turns;
   }

@@ -18,6 +18,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 CONFIG="$PLUGIN_DIR/config.json"
 
+# ── Static fallback policy (used when no state is available) ──────────────────
+print_fallback_policy() {
+  cat << 'FALLBACK'
+Context Monitor Policy: When summarizing this session, please explicitly preserve:
+1. All absolute and relative file paths that have been modified or discussed.
+2. Any specific error messages we are currently trying to fix.
+3. Important environment variables, config values, or port numbers.
+4. Output these as a structured list at the top or bottom of your summary.
+FALLBACK
+}
+
 # ── Read hook input ────────────────────────────────────────────────────────────
 INPUT="$(cat)"
 
@@ -28,13 +39,7 @@ SESSION_ID="$(echo "$INPUT" | node -e "
 
 if [ -z "$SESSION_ID" ]; then
   # No session context — fall back to static policy
-  cat << 'FALLBACK'
-Context Monitor Policy: When summarizing this session, please explicitly preserve:
-1. All absolute and relative file paths that have been modified or discussed.
-2. Any specific error messages we are currently trying to fix.
-3. Important environment variables, config values, or port numbers.
-4. Output these as a structured list at the top or bottom of your summary.
-FALLBACK
+  print_fallback_policy
   exit 0
 fi
 
@@ -48,13 +53,7 @@ STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
 if [ ! -f "$STATE_FILE" ]; then
   # No state — fall back to static policy
-  cat << 'FALLBACK'
-Context Monitor Policy: When summarizing this session, please explicitly preserve:
-1. All absolute and relative file paths that have been modified or discussed.
-2. Any specific error messages we are currently trying to fix.
-3. Important environment variables, config values, or port numbers.
-4. Output these as a structured list at the top or bottom of your summary.
-FALLBACK
+  print_fallback_policy
   exit 0
 fi
 
@@ -68,11 +67,11 @@ node -e "
     state = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
   } catch(_) {
     // Fall back to static policy
-    console.log(\`Context Monitor Policy: When summarizing this session, please explicitly preserve:
-1. All absolute and relative file paths that have been modified or discussed.
-2. Any specific error messages we are currently trying to fix.
-3. Important environment variables, config values, or port numbers.
-4. Output these as a structured list at the top or bottom of your summary.\`);
+    console.log('Context Monitor Policy: When summarizing this session, please explicitly preserve:');
+    console.log('1. All absolute and relative file paths that have been modified or discussed.');
+    console.log('2. Any specific error messages we are currently trying to fix.');
+    console.log('3. Important environment variables, config values, or port numbers.');
+    console.log('4. Output these as a structured list at the top or bottom of your summary.');
     process.exit(0);
   }
 
