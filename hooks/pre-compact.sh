@@ -185,6 +185,6 @@ node -e "
   lines.push('=== END SMART COMPACT INSTRUCTIONS ===');
 
   console.log(lines.join('\\n'));
-" 2>/dev/null
+" 2>/dev/null || true
 
 exit 0
