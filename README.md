@@ -102,9 +102,15 @@ After each response (Stop hook, background)
         Writes tmux status file (if enabled)
 
 /compact lifecycle
-  ├── pre-compact.sh
-  │     Injects structured instructions to preserve key context in summary
+  ├── pre-compact.sh (Smart Compact Instructions)
+  │     Reads state file → builds dynamic instructions based on:
+  │       1. Previous compact summary (carry-forward, prevents amnesia)
+  │       2. Topic history (marks stale vs active topics)
+  │       3. Active task state (completion status, relevance)
+  │       4. Compact count (warns about cumulative loss risk)
+  │     Falls back to static policy if no state available
   └── post-compact.sh
+        Saves full compact summary to state for carry-forward
         Resets token history, logs compact event, sends notification
 
 Status line (real-time, from Claude Code UI)
@@ -116,6 +122,65 @@ Status line (real-time, from Claude Code UI)
 
 ---
 
+## Smart Compact Instructions
+
+Claude Code's native compaction suffers from **cumulative amnesia** — each compact summarizes the previous summary, not the original conversation. After 2-3 compactions, key decisions and context are lost (see [anthropics/claude-code#33212](https://github.com/anthropics/claude-code/issues/33212)).
+
+This plugin solves it by injecting **dynamic, context-aware instructions** into the compact prompt via the `PreCompact` hook. Instead of a static 4-line policy, the compact prompt now includes:
+
+### What gets injected
+
+**1. Previous compact summary (carry-forward)**
+
+The full summary from the last compaction is preserved verbatim under a "Historical Context" section. This creates a cumulative memory chain — each compact carries forward all previous summaries, preventing exponential fidelity loss.
+
+**2. Topic history (stale vs active)**
+
+The advisor's topic drift detection is fed into the compact prompt. Stale topics (before the most recent topic shift) are marked for aggressive summarization. The active topic gets full detail preservation.
+
+```
+--- TOPIC HISTORY ---
+Topic shifts detected during this session:
+  [1] Turn 5: auth refactor
+  [2] Turn 18: API rate limiting
+  [3] Turn 34: deployment config
+Active topic: deployment config (preserve in FULL detail)
+Stale topics: auth refactor, API rate limiting
+For stale topics: summarize AGGRESSIVELY — keep only final decisions and outcomes.
+```
+
+**3. Active task state**
+
+The advisor's task completion detection and relevance score are injected:
+
+- **COMPLETE**: Previous task finished — safe to compact its details aggressively
+- **IN PROGRESS**: Task still running — preserve full debugging state and reasoning
+- **UNRELATED topic shift**: Old context is stale — focus detail on the new topic
+
+**4. Compact count warning**
+
+After 3+ compactions, the prompt explicitly warns about cumulative context loss and instructs extra thoroughness in preserving key decisions and user-stated constraints.
+
+### How it works
+
+```
+advisor.js (every prompt > 45%)
+  └── Saves active_task to state file:
+        { completion_status, topic_label, topic_relevance, compact_score }
+
+post-compact.sh (after each compact)
+  └── Saves full summary to state file:
+        { last_compact_summary, last_compact_timestamp, last_compact_turn }
+
+pre-compact.sh (before each compact)
+  └── Reads state → builds dynamic instructions:
+        Previous summary → "PRESERVE VERBATIM"
+        Topic history    → "stale: summarize aggressively, active: full detail"
+        Active task      → "COMPLETE: safe to drop" / "IN PROGRESS: keep all"
+        Compact count   → "3+ compactions: be extra thorough"
+```
+
+---
 ## Installation
 
 ### Plugin system (recommended)

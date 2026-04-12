@@ -52,7 +52,8 @@ if [ ! -f "$STATE_FILE" ]; then
     fs.writeFileSync('$STATE_FILE', JSON.stringify({
       session_id:'$SESSION_ID', token_history:[], topics:[],
       last_compact_at_turn:0, total_turns:0, last_assistant_message:'',
-      compact_events:[]
+      compact_events:[], last_compact_summary:'', last_compact_timestamp:null,
+      last_compact_turn:null, active_task:null
     }, null, 2));
   " 2>/dev/null || true
 fi

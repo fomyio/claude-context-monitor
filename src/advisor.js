@@ -70,7 +70,7 @@ function getApiKey() {
 }
 
 function detectTaskCompletion(lastAssistantMsg) {
-  if (!lastAssistantMsg) return { complete: false, pts: 0 };
+  if (!lastAssistantMsg) return { status: 'ongoing', pts: 0 };
   
   const COMPLETION_PATTERNS = [
     /tests? (pass|passing|passed)/i,
@@ -215,14 +215,28 @@ async function main() {
     outputText = \`[CTX] 💡 Suggestion: You might want to /compact (\${rationale})\`;
   }
 
-  // 6. Topic boundary tracking
-  if (evalResult && evalResult.label === 'unrelated' && stateFile) {
+  // 6. Save state for smart compact instructions (single write)
+  if (stateFile) {
     try {
-      state.topics = state.topics || [];
-      state.topics.push({
-        turn: state.total_turns + 1,
-        label: evalResult.reason
-      });
+      // Track topic boundary shifts
+      if (evalResult && (evalResult.label === 'unrelated' || evalResult.label === 'drifted')) {
+        state.topics = state.topics || [];
+        state.topics.push({
+          turn: state.total_turns + 1,
+          label: evalResult.reason,
+          shift_type: evalResult.label   // 'unrelated' | 'drifted'
+        });
+      }
+
+      // Persist active task state for pre-compact.sh
+      state.active_task = {
+        completion_status: completion.status, // 'complete' | 'partial' | 'ongoing'
+        topic_label: evalResult ? evalResult.reason : null,
+        topic_relevance: evalResult ? evalResult.label : null, // 'related' | 'drifted' | 'unrelated'
+        compact_score: totalScore,
+        updated_at: new Date().toISOString(),
+      };
+
       fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
     } catch (_) {}
   }

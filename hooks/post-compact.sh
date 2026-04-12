@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hooks/post-compact.sh — PostCompact hook
 # Reads PostCompact JSON from stdin, resets token history, logs compact event,
-# and sends a desktop notification.
+# saves compact summary for carry-forward, and sends a desktop notification.
 
 set -euo pipefail
 
@@ -15,12 +15,6 @@ INPUT="$(cat)"
 SESSION_ID="$(echo "$INPUT" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
   console.log(d.session_id ?? d.sessionId ?? '');
-" 2>/dev/null || echo '')"
-
-COMPACT_SUMMARY="$(echo "$INPUT" | node -e "
-  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-  const s=d.compact_summary ?? d.summary ?? '';
-  console.log(typeof s === 'string' ? s.substring(0,200) : '');
 " 2>/dev/null || echo '')"
 
 TRIGGER="$(echo "$INPUT" | node -e "
@@ -42,7 +36,18 @@ if [ ! -f "$STATE_FILE" ]; then exit 0; fi
 
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# ── Update state: log compact event, reset token history ─────────────────────
+# ── Save full summary to temp file for carry-forward ──────────────────────────
+# Extract the full (non-truncated) summary from the input JSON and write to a
+# temp file so the node block below can read it without shell escaping issues.
+FULL_SUMMARY_FILE="$(mktemp)"
+trap "rm -f '$FULL_SUMMARY_FILE'" EXIT
+echo "$INPUT" | node -e "
+  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  const s=d.compact_summary ?? d.summary ?? '';
+  process.stdout.write(typeof s === 'string' ? s : '');
+" > "$FULL_SUMMARY_FILE" 2>/dev/null || true
+
+# ── Update state: log compact event, save summary, reset token history ────────
 node -e "
   const fs = require('fs');
   let state;
@@ -53,15 +58,32 @@ node -e "
   const history = state.token_history || [];
   const preTokens = history.length > 0 ? history[history.length - 1].tokens_used : 0;
 
-  // Log compact event
+  // Read the full summary from temp file (written by the shell script above)
+  let fullSummary = '';
+  try { fullSummary = fs.readFileSync('$FULL_SUMMARY_FILE', 'utf8').trim(); } catch(_) {}
+
+  // Log compact event (use first 100 chars of summary as preview)
   state.compact_events = state.compact_events || [];
   state.compact_events.push({
     compacted_at: '$TIMESTAMP',
     trigger: '$TRIGGER',
     pre_tokens: preTokens,
     turns_at_compact: state.total_turns,
-    summary_preview: \`$COMPACT_SUMMARY\`.substring(0, 100),
+    summary_preview: fullSummary.substring(0, 100),
   });
+
+  // Save full compact summary for carry-forward into next compact prompt.
+  // This solves cumulative amnesia: each compact preserves key decisions from
+  // all previous compacts, not just the current conversation.
+  // Trim at paragraph boundaries to avoid truncating mid-sentence.
+  if (fullSummary.length > 0) {
+    let summary = fullSummary.substring(0, 3000);
+    const lastBreak = summary.lastIndexOf('\\n\\n', 2950);
+    if (lastBreak > 1500) summary = summary.substring(0, lastBreak);
+    state.last_compact_summary = summary;
+    state.last_compact_timestamp = '$TIMESTAMP';
+    state.last_compact_turn = state.total_turns;
+  }
 
   // Reset token history — context was freed
   state.token_history = [];
@@ -69,6 +91,9 @@ node -e "
 
   fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
 " 2>/dev/null || true
+
+# Clean up temp file
+rm -f "$FULL_SUMMARY_FILE" 2>/dev/null || true
 
 # ── Send desktop notification ─────────────────────────────────────────────────
 bash "$NOTIFY" "info" "🧹 Compact Complete" "Context freed! Session continues fresh. (trigger: $TRIGGER)" 2>/dev/null || true
