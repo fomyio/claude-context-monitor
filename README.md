@@ -6,7 +6,7 @@
 
 A Claude Code plugin that watches your context window in real-time, predicts when you'll hit the limit, and tells you *before* it's too late.
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue)](https://github.com/fomyio/claude-context-monitor/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/fomyio/claude-context-monitor/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#)
