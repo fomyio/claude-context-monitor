@@ -4,9 +4,9 @@
 
 **Stop losing work to silent context overflows.**
 
-A Claude Code plugin that watches your context window in real-time, predicts when you'll hit the limit, and tells you *before* it's too late.
+A Claude Code plugin that watches your context window in real-time, predicts when you'll hit the limit, and tells you *before* it's too late — then makes your `/compact` actually remember what matters.
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue)](https://github.com/fomyio/claude-context-monitor/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/fomyio/claude-context-monitor/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#)
@@ -14,7 +14,6 @@ A Claude Code plugin that watches your context window in real-time, predicts whe
 </div>
 
 ![ClaudeContextPlugin-ezgif com-optimize](https://github.com/user-attachments/assets/9666a5a8-bede-4493-8a36-34e92b6e1ad8)
-
 
 ---
 
@@ -24,21 +23,27 @@ Claude Code's context window is 200,000 tokens. When it fills up, your session e
 
 And even when you *know* to compact, you don't know *when*. Compacting too early wastes a good session. Compacting too late means losing context you needed.
 
-**This plugin solves both problems.**
+But there's a deeper problem: **cumulative amnesia**. Each `/compact` summarizes the previous summary, not the original conversation. After 2-3 compactions, key decisions, file paths, and debugging context are gone. ([anthropics/claude-code#33212](https://github.com/anthropics/claude-code/issues/33212))
+
+**This plugin solves all three problems.**
 
 ---
 
-## What it does
+## Features
 
-Every time you send a message, the plugin runs silently in the background and injects a status line into Claude's context:
+### Real-time context monitoring
+
+Every time you send a message, the plugin injects a status line into Claude's context:
 
 ```
 [CTX] 🟢 [████░░░░░░░░░░░░░░░░] 22.1% | 44K/200K | ~124 turns left
 ```
 
-As your session grows, it gets smarter. Above 45% usage it activates a semantic evaluation — it sends a lightweight fingerprint of your recent conversation to Claude Haiku (~200 tokens, ~$0.0005) and asks: *is this new prompt related to what we've been doing, or is this a fresh topic?*
+As your session grows, the color shifts — 🟢 → 🟡 → 🔴 — so you always know where you stand.
 
-If you're starting something new while context is already high, it tells you:
+### Smart compact recommendations
+
+Above 45% usage, the plugin activates a semantic evaluation. It sends a lightweight fingerprint of your recent conversation to Claude Haiku (~200 tokens, ~$0.0005) and asks: *is this new prompt related to what we've been doing, or is this a fresh topic?*
 
 ```
 [CTX] 💡 Suggestion: You might want to /compact (Topic drift detected)
@@ -46,7 +51,13 @@ If you're starting something new while context is already high, it tells you:
 [CTX] 🚨 URGENT: Strongly recommend running /compact now (Score 71)
 ```
 
-It also sends desktop notifications at 70%, 85%, and 95% — so you're never caught off guard even when you're not looking at the terminal.
+### Desktop notifications
+
+Alerts at 70%, 85%, and 95% context usage — so you're never caught off guard even when you're not looking at the terminal.
+
+### Smart Compact Instructions (v1.1.0)
+
+When you finally run `/compact`, the plugin doesn't just tell you *when* — it tells Claude *what to keep and what to drop*. This is the feature that solves cumulative amnesia. See [Smart Compact Instructions](#smart-compact-instructions) below.
 
 ---
 
@@ -73,6 +84,84 @@ The total score drives the recommendation:
 
 ---
 
+## Smart Compact Instructions
+
+Claude Code's native compaction has a fatal flaw: **it summarizes the previous summary, not the original conversation**. After 2-3 compactions, key decisions and context are lost. This is a well-documented problem — see [anthropics/claude-code#33212](https://github.com/anthropics/claude-code/issues/33212), [#28721](https://github.com/anthropics/claude-code/issues/28721), and [#3288](https://github.com/anthropics/claude-code/issues/3288).
+
+This plugin solves it by injecting **dynamic, context-aware instructions** into the compact prompt via the `PreCompact` hook. Instead of a static "preserve file paths" policy, the compact prompt now includes:
+
+### 1. Carry-forward memory (solves amnesia)
+
+The full summary from the *previous* compaction is preserved verbatim under a "Historical Context" section. Each compact carries forward all prior summaries, creating a cumulative memory chain that prevents exponential fidelity loss.
+
+```
+--- PREVIOUS COMPACT SUMMARY (PRESERVE VERBATIM) ---
+This is a summary from a previous compaction in this session.
+You MUST include this content in your new summary under a
+"Historical Context" section. Do NOT discard or paraphrase it.
+
+Session involved refactoring authentication module. Key decisions:
+switched from JWT to session-based auth, updated middleware in auth.ts.
+```
+
+### 2. Topic-aware summarization (solves "what to keep")
+
+The advisor's Haiku-based drift detection identifies which topics are **stale** (safe to summarize aggressively) and which are **active** (must be preserved in full detail).
+
+```
+--- TOPIC HISTORY ---
+Topic shifts detected during this session:
+  [1] Turn 5: auth refactor
+  [2] Turn 18: API rate limiting [drifted]
+  [3] Turn 34: deployment config
+Active topic: deployment config (preserve in FULL detail)
+Stale topics: auth refactor, API rate limiting
+For stale topics: summarize AGGRESSIVELY — keep only final decisions and outcomes.
+```
+
+### 3. Task completion signaling (solves "what to drop")
+
+The advisor detects whether your current task is complete, partial, or still in progress:
+
+- **COMPLETE** → "It is SAFE to compact this task's details aggressively. Preserve only final decisions."
+- **IN PROGRESS** → "Do NOT compact away the active debugging state or work-in-progress."
+- **UNRELATED topic shift** → "The user has started a new topic. Previous context is STALE. Summarize aggressively."
+
+### 4. Compact count warning
+
+After 3+ compactions, the prompt explicitly warns about cumulative quality degradation:
+
+```
+--- COMPACTION HISTORY ---
+This session has been compacted 3 time(s) before.
+WARNING: Multiple compactions cause cumulative context loss.
+Be EXTRA thorough in preserving key decisions, file paths, and
+user-stated constraints. Include the Historical Context section.
+```
+
+### How it works
+
+```
+advisor.js (every prompt > 45%)
+  └── Saves active_task to state file:
+        { completion_status, topic_label, topic_relevance, compact_score }
+
+post-compact.sh (after each compact)
+  └── Saves full summary to state file:
+        { last_compact_summary, last_compact_timestamp, last_compact_turn }
+
+pre-compact.sh (before each compact)
+  └── Reads state → builds dynamic instructions:
+        Previous summary → "PRESERVE VERBATIM"
+        Topic history    → "stale: summarize aggressively, active: full detail"
+        Active task      → "COMPLETE: safe to drop" / "IN PROGRESS: keep all"
+        Compact count   → "3+ compactions: be extra thorough"
+```
+
+All data flows through a per-session state file — no external services, no additional API calls beyond the existing Haiku eval.
+
+---
+
 ## Architecture
 
 ```
@@ -91,6 +180,7 @@ Every prompt (UserPromptSubmit)
         │     fingerprint.js → last 5 turns summary
         │     → Claude Haiku API (200 tokens, ~$0.0005)
         │     Scores: token_pressure + task_completion + drift + age
+        │     Persists: topic shifts, active_task to state file
         │     Returns: score, action, recommendation text
         │
         └── stdout → injected into Claude's LLM context
@@ -122,65 +212,6 @@ Status line (real-time, from Claude Code UI)
 
 ---
 
-## Smart Compact Instructions
-
-Claude Code's native compaction suffers from **cumulative amnesia** — each compact summarizes the previous summary, not the original conversation. After 2-3 compactions, key decisions and context are lost (see [anthropics/claude-code#33212](https://github.com/anthropics/claude-code/issues/33212)).
-
-This plugin solves it by injecting **dynamic, context-aware instructions** into the compact prompt via the `PreCompact` hook. Instead of a static 4-line policy, the compact prompt now includes:
-
-### What gets injected
-
-**1. Previous compact summary (carry-forward)**
-
-The full summary from the last compaction is preserved verbatim under a "Historical Context" section. This creates a cumulative memory chain — each compact carries forward all previous summaries, preventing exponential fidelity loss.
-
-**2. Topic history (stale vs active)**
-
-The advisor's topic drift detection is fed into the compact prompt. Stale topics (before the most recent topic shift) are marked for aggressive summarization. The active topic gets full detail preservation.
-
-```
---- TOPIC HISTORY ---
-Topic shifts detected during this session:
-  [1] Turn 5: auth refactor
-  [2] Turn 18: API rate limiting
-  [3] Turn 34: deployment config
-Active topic: deployment config (preserve in FULL detail)
-Stale topics: auth refactor, API rate limiting
-For stale topics: summarize AGGRESSIVELY — keep only final decisions and outcomes.
-```
-
-**3. Active task state**
-
-The advisor's task completion detection and relevance score are injected:
-
-- **COMPLETE**: Previous task finished — safe to compact its details aggressively
-- **IN PROGRESS**: Task still running — preserve full debugging state and reasoning
-- **UNRELATED topic shift**: Old context is stale — focus detail on the new topic
-
-**4. Compact count warning**
-
-After 3+ compactions, the prompt explicitly warns about cumulative context loss and instructs extra thoroughness in preserving key decisions and user-stated constraints.
-
-### How it works
-
-```
-advisor.js (every prompt > 45%)
-  └── Saves active_task to state file:
-        { completion_status, topic_label, topic_relevance, compact_score }
-
-post-compact.sh (after each compact)
-  └── Saves full summary to state file:
-        { last_compact_summary, last_compact_timestamp, last_compact_turn }
-
-pre-compact.sh (before each compact)
-  └── Reads state → builds dynamic instructions:
-        Previous summary → "PRESERVE VERBATIM"
-        Topic history    → "stale: summarize aggressively, active: full detail"
-        Active task      → "COMPLETE: safe to drop" / "IN PROGRESS: keep all"
-        Compact count   → "3+ compactions: be extra thorough"
-```
-
----
 ## Installation
 
 ### Plugin system (recommended)
@@ -312,12 +343,11 @@ claude-context-monitor/
 ├── package.json
 ├── hooks/
 │   ├── settings-snippet.json # Manual install: merge this into settings.json
-│   ├── settings-snippet.json# Manual install: merge this into settings.json
 │   ├── check.sh             # UserPromptSubmit — main orchestrator
 │   ├── session-init.sh      # SessionStart — initialize session state
 │   ├── update-state.sh      # Stop — persist stats after each response
-│   ├── pre-compact.sh       # PreCompact — enrich compact instructions
-│   └── post-compact.sh      # PostCompact — reset counter, log savings
+│   ├── pre-compact.sh       # PreCompact — smart compact instructions
+│   └── post-compact.sh      # PostCompact — save summary, reset state
 ├── src/
 │   ├── analyze.js           # Token analyzer: reads JSONL transcript
 │   ├── advisor.js           # Scoring engine: Haiku eval + compact score
