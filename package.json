@@ -1,6 +1,6 @@
 {
   "name": "claude-context-monitor",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Claude Code plugin for real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions.",
   "main": "src/dashboard.js",
   "bin": {
