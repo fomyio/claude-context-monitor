@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # src/uninstall.sh — Manual cleanup for claude-context-monitor plugin.
 # Run this if you've removed the plugin and still see leftover artifacts.
-# Usage: bash ~/.claude/plugins/context-monitor/src/uninstall.sh
+# Usage: bash ${CLAUDE_PLUGIN_ROOT}/src/uninstall.sh
 
 set -euo pipefail
 

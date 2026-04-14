@@ -28,7 +28,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/update-state.sh",
-            "timeout": 10000
+            "timeout": 10000,
+            "background": true
           }
         ]
       }

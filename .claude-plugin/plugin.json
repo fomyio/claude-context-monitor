@@ -1,6 +1,6 @@
 {
   "name": "context-monitor",
-  "description": "Real-time context window tracking, semantic relevance evaluation, and proactive compact suggestions for Claude Code.",
+  "description": "Real-time context window tracking, semantic relevance evaluation, proactive compact suggestions, and smart compact instructions that carry forward memory across compactions for Claude Code.",
   "version": "1.1.0",
   "author": {
     "name": "Mosaab",
@@ -10,8 +10,12 @@
   "repository": "https://github.com/fomyio/claude-context-monitor.git",
   "keywords": [
     "context-window",
+    "context-monitor",
     "token-tracker",
     "compact",
-    "hooks"
+    "statusline",
+    "hooks",
+    "context-usage",
+    "token-budget"
   ]
 }
