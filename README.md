@@ -31,7 +31,7 @@ But there's a deeper problem: **cumulative amnesia**. Each `/compact` summarizes
 
 ## Features
 
-### Real-time context monitoring
+### 1. Real-time context monitoring
 
 Every time you send a message, the plugin injects a status line into Claude's context:
 
@@ -41,7 +41,7 @@ Every time you send a message, the plugin injects a status line into Claude's co
 
 As your session grows, the color shifts — 🟢 → 🟡 → 🔴 — so you always know where you stand.
 
-### Smart compact recommendations
+### 2. Smart compact recommendations
 
 Above 45% usage, the plugin activates a semantic evaluation. It sends a lightweight fingerprint of your recent conversation to Claude Haiku (~200 tokens, ~$0.0005) and asks: *is this new prompt related to what we've been doing, or is this a fresh topic?*
 
@@ -51,13 +51,21 @@ Above 45% usage, the plugin activates a semantic evaluation. It sends a lightwei
 [CTX] 🚨 URGENT: Strongly recommend running /compact now (Score 71)
 ```
 
-### Desktop notifications
+### 3. Smart Compact Instructions (v1.1.0) — *solves cumulative amnesia*
+
+When you finally run `/compact`, the plugin doesn't just tell you *when* — it tells Claude *what to keep and what to drop*. This is the feature that solves cumulative amnesia. See [Smart Compact Instructions](#smart-compact-instructions) below.
+
+### 4. Desktop notifications
 
 Alerts at 70%, 85%, and 95% context usage — so you're never caught off guard even when you're not looking at the terminal.
 
-### Smart Compact Instructions (v1.1.0)
+### 5. Status line integration
 
-When you finally run `/compact`, the plugin doesn't just tell you *when* — it tells Claude *what to keep and what to drop*. This is the feature that solves cumulative amnesia. See [Smart Compact Instructions](#smart-compact-instructions) below.
+A real-time status bar in Claude Code's UI showing context usage, turns left, estimated cost, and cache efficiency:
+
+```
+🟢 [████░░░░░░░░░░░░░░░░] 22.1% · 44K/200K · ~124 turns · $0.012 · eff 74%
+```
 
 ---
 
@@ -248,6 +256,8 @@ echo "sk-ant-..." > ~/.anthropic_key
 chmod 600 ~/.anthropic_key
 ```
 
+See [SETUP.md](SETUP.md) for alternative configuration options, including disabling the evaluation entirely.
+
 ---
 
 ## Configuration
@@ -291,7 +301,30 @@ All settings live in `config.json`. The defaults work well out of the box, but h
 
   // Write context status to a file for tmux status bar (opt-in)
   "tmux_status_enabled": false,
-  "tmux_status_file": "/tmp/claude-ctx-status"
+  "tmux_status_file": "/tmp/claude-ctx-status",
+
+  // Per-model context limits (tokens)
+  "context_limits": {
+    "claude-opus-4-6": 200000,
+    "claude-opus-4-5": 200000,
+    "claude-opus-4": 200000,
+    "claude-sonnet-4-6": 200000,
+    "claude-sonnet-4-5": 200000,
+    "claude-haiku-4-5": 200000
+  },
+
+  // Per-model pricing (USD per million input tokens)
+  "model_prices_per_million_input": {
+    "claude-opus-4-6": 15.00,
+    "claude-opus-4-5": 15.00,
+    "claude-opus-4": 15.00,
+    "claude-sonnet-4-6": 3.00,
+    "claude-sonnet-4-5": 3.00,
+    "claude-haiku-4-5": 0.80
+  },
+
+  // Number of recent turns for burn rate calculation
+  "burn_rate_window_turns": 4
 }
 ```
 
@@ -322,6 +355,20 @@ Recommendation: ⚠️ Warning — Context threshold high. Consider /compact.
 
 ---
 
+## Hooks
+
+The plugin registers six Claude Code hooks:
+
+| Hook | Script | Purpose |
+|------|--------|---------|
+| `SessionStart` | `hooks/session-init.sh` | Initialize per-session state, check CLAUDE.md bloat, set up statusline |
+| `UserPromptSubmit` | `hooks/check.sh` | Run token analysis + advisor scoring, inject status line |
+| `Stop` | `hooks/update-state.sh` | Persist token history and stats after each response (background) |
+| `PreCompact` | `hooks/pre-compact.sh` | Inject smart compact instructions before summarization |
+| `PostCompact` | `hooks/post-compact.sh` | Save compact summary for carry-forward, reset state, notify |
+
+---
+
 ## Cost
 
 The Haiku eval only activates above 45% context usage. At heavy use (1000 turns/month):
@@ -339,9 +386,11 @@ claude-context-monitor/
 ├── .claude-plugin/
 │   ├── plugin.json          # Plugin manifest (name, version, author)
 │   └── marketplace.json     # Marketplace manifest for /plugin install
+├── SETUP.md                 # API key setup guide
 ├── config.json              # User-configurable thresholds + settings
 ├── package.json
 ├── hooks/
+│   ├── hooks.json           # Hook registrations (${CLAUDE_PLUGIN_ROOT} paths)
 │   ├── settings-snippet.json # Manual install: merge this into settings.json
 │   ├── check.sh             # UserPromptSubmit — main orchestrator
 │   ├── session-init.sh      # SessionStart — initialize session state
@@ -425,6 +474,24 @@ Please include:
 4. The exact hook output or error message
 
 Open an issue at [github.com/fomyio/claude-context-monitor/issues](https://github.com/fomyio/claude-context-monitor/issues).
+
+---
+
+## Uninstalling
+
+To remove the plugin and all artifacts:
+
+```bash
+/plugin uninstall context-monitor
+```
+
+Or manually:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/src/uninstall.sh
+```
+
+This removes the statusline entry from `settings.json`, cleans up the statusline wrapper, and removes orphaned cache directories.
 
 ---
 

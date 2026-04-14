@@ -36,7 +36,7 @@
   "tmux_status_enabled": false,
   "tmux_status_file": "/tmp/claude-ctx-status",
   "fingerprint_max_turns": 5,
-  "state_dir": "~/.claude/context-monitor-state",
+  "state_dir": "~/.claude/plugins/context-monitor/state",
   "claude_md_bloat_threshold_pct": 15,
   "burn_rate_window_turns": 4
 }
