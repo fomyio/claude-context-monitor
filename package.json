@@ -20,10 +20,7 @@
     "claude",
     "claude-code",
     "context-window",
-    "context-monitor",
     "token-tracker",
-    "compact",
-    "statusline",
     "hooks"
   ],
   "license": "MIT"
