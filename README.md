@@ -357,7 +357,7 @@ Recommendation: ⚠️ Warning — Context threshold high. Consider /compact.
 
 ## Hooks
 
-The plugin registers six Claude Code hooks:
+The plugin registers five Claude Code hooks:
 
 | Hook | Script | Purpose |
 |------|--------|---------|
