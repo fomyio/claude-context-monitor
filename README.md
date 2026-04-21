@@ -10,6 +10,7 @@ A Claude Code plugin that watches your context window in real-time, predicts whe
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#)
+[![Homepage](https://img.shields.io/badge/homepage-docs-blue)](docs/HOMEPAGE.md)
 
 </div>
 

@@ -6,7 +6,7 @@
     "name": "Mosaab",
     "url": "https://fomy.io"
   },
-  "homepage": "https://github.com/fomyio/claude-context-monitor",
+  "homepage": "https://github.com/fomyio/claude-context-monitor/blob/main/docs/HOMEPAGE.md",
   "repository": "https://github.com/fomyio/claude-context-monitor.git",
   "keywords": [
     "context-window",
