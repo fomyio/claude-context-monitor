@@ -59,11 +59,12 @@ You want to keep an eye on session cost without staring at the terminal. The plu
 
 ## Ready-to-paste JSON
 
+> **Note:** Add `"version"` manually — see `package.json` for the current value to avoid drift.
+
 ```json
 {
-  "name": "claude-context-monitor",
+  "name": "context-monitor",
   "description": "Prevent context window exhaustion. Real-time token tracking, semantic compact scoring, and carry-forward memory that fixes cumulative amnesia across /compact cycles.",
-  "version": "1.1.0",
   "author": {
     "name": "Mosaab",
     "url": "https://fomy.io"

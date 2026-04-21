@@ -150,6 +150,7 @@ At normal use: closer to **$0.05–0.15/month**.
 - [Repository](https://github.com/fomyio/claude-context-monitor)
 - [Issues & feature requests](https://github.com/fomyio/claude-context-monitor/issues)
 - [Full documentation](https://github.com/fomyio/claude-context-monitor/blob/main/README.md)
+- [Privacy policy](PRIVACY.md)
 
 ---
 
