@@ -59,20 +59,71 @@ if [ "$STATS" = '{}' ] || [ -z "$STATS" ]; then
   exit 0
 fi
 
-USAGE_PCT="$(echo "$STATS" | node -e "
+# ── Prefer accurate context_window data from statusline.sh (ground truth) ─────
+# statusline.sh writes used_tokens / used_percentage / context_limit to state.
+# Claude Code's internal tracking includes system prompts, tool defs, and injected
+# status lines — tokens that analyze.js cannot see in the transcript.
+STATE_DIR_CFG="$(node -e "
+  const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));
+  console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
+" 2>/dev/null || echo "~/.claude/plugins/context-monitor/state")"
+STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_FILE="$STATE_DIR/${SESSION_ID}.json"
+
+# Read ground-truth values from state if available
+GROUND_TRUTH="$(node -e "
+  const fs = require('fs');
+  try {
+    const s = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
+    console.log(JSON.stringify({
+      used_tokens: s.used_tokens ?? null,
+      used_percentage: s.used_percentage ?? null,
+      context_limit: s.context_limit ?? null
+    }));
+  } catch(_) { console.log('{}'); }
+" 2>/dev/null || echo '{}')"
+
+TOKENS_MAX="$(echo "$STATS" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-  console.log(d.usage_pct ?? 0);
-" 2>/dev/null || echo 0)"
+  console.log(d.tokens_max ?? 200000);
+" 2>/dev/null || echo 200000)"
+
+# Override with ground truth when available
+OVERRIDE_USED_TOKENS="$(echo "$GROUND_TRUTH" | node -e "
+  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  console.log(d.used_tokens ?? '');
+" 2>/dev/null || echo '')"
+
+OVERRIDE_USED_PCT="$(echo "$GROUND_TRUTH" | node -e "
+  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  console.log(d.used_percentage ?? '');
+" 2>/dev/null || echo '')"
+
+OVERRIDE_LIMIT="$(echo "$GROUND_TRUTH" | node -e "
+  const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  console.log(d.context_limit ?? '');
+" 2>/dev/null || echo '')"
 
 TOKENS_USED="$(echo "$STATS" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
   console.log(d.tokens_used ?? 0);
 " 2>/dev/null || echo 0)"
 
-TOKENS_MAX="$(echo "$STATS" | node -e "
+USAGE_PCT="$(echo "$STATS" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-  console.log(d.tokens_max ?? 200000);
-" 2>/dev/null || echo 200000)"
+  console.log(d.usage_pct ?? 0);
+" 2>/dev/null || echo 0)"
+
+# Apply overrides: Claude Code's context_window data is ground truth
+if [ -n "$OVERRIDE_USED_TOKENS" ] && [ "$OVERRIDE_USED_TOKENS" != "null" ]; then
+  TOKENS_USED="$OVERRIDE_USED_TOKENS"
+fi
+if [ -n "$OVERRIDE_USED_PCT" ] && [ "$OVERRIDE_USED_PCT" != "null" ]; then
+  USAGE_PCT="$OVERRIDE_USED_PCT"
+fi
+if [ -n "$OVERRIDE_LIMIT" ] && [ "$OVERRIDE_LIMIT" != "null" ]; then
+  TOKENS_MAX="$OVERRIDE_LIMIT"
+fi
 
 TURNS_LEFT="$(echo "$STATS" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
