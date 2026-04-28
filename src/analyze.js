@@ -86,7 +86,45 @@ function estimateOutputTokens(content) {
 // ── Main parser ───────────────────────────────────────────────────────────────
 
 function analyzeTranscript(transcriptPath, model, sessionId) {
+  let groundTruth = null;
+
+  // ── Prefer ground-truth context_window data from statusline.sh ──────────────
+  // statusline.sh receives accurate used_tokens/used_percentage from Claude Code.
+  // Use these when available because the transcript's usage data does not include
+  // system prompts, tool definitions, or injected status-line text.
+  if (sessionId) {
+    try {
+      const stateDirCfg = config.state_dir || '~/.claude/context-monitor-state';
+      const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
+      const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
+      if (state.used_percentage != null && state.used_tokens != null) {
+        groundTruth = {
+          used_tokens: state.used_tokens,
+          used_percentage: state.used_percentage,
+          context_limit: state.context_limit || null,
+        };
+      }
+    } catch (_) {}
+  }
+
   if (!transcriptPath || !fs.existsSync(transcriptPath)) {
+    // No transcript, but we might still have ground truth from statusline
+    if (groundTruth) {
+      const tokensMax = groundTruth.context_limit || getContextLimit(model, sessionId);
+      return {
+        tokens_used: groundTruth.used_tokens,
+        tokens_input: groundTruth.used_tokens,
+        tokens_output_est: 0,
+        tokens_max: tokensMax,
+        usage_pct: Math.round(groundTruth.used_percentage * 10) / 10,
+        burn_rate: 0,
+        turns_left: null,
+        estimated_cost_usd: 0,
+        cache_efficiency: 0,
+        total_turns: 0,
+        model: model || 'unknown',
+      };
+    }
     return null;
   }
 
@@ -206,14 +244,30 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
     (latest.cacheReadTokens / 1_000_000) * cacheReadPrice +
     (latest.cacheCreationTokens / 1_000_000) * cacheWritePrice;
 
+  // ── Override with ground truth from statusline.sh when available ───────────
+  // Claude Code's context_window includes system prompts, tool defs, and injected
+  // text that the transcript usage data cannot see. Use the authoritative numbers.
+  let finalTokensUsed = tokensUsed;
+  let finalTokensInput = latest.totalInputTokens;
+  let finalTokensMax = tokensMax;
+  let finalUsagePct = usagePct;
+  if (groundTruth) {
+    finalTokensUsed = groundTruth.used_tokens;
+    finalTokensInput = groundTruth.used_tokens;
+    finalTokensMax = groundTruth.context_limit || tokensMax;
+    finalUsagePct = (groundTruth.used_tokens / finalTokensMax) * 100;
+  }
+  const finalTokensRemaining = Math.max(0, finalTokensMax - finalTokensUsed);
+  const finalTurnsLeft = burnRate > 0 ? Math.floor(finalTokensRemaining / burnRate) : turnsLeft;
+
   return {
-    tokens_used: tokensUsed,
-    tokens_input: latest.totalInputTokens,
+    tokens_used: finalTokensUsed,
+    tokens_input: finalTokensInput,
     tokens_output_est: totalOutputTokensEstimate,
-    tokens_max: tokensMax,
-    usage_pct: Math.round(usagePct * 10) / 10,
+    tokens_max: finalTokensMax,
+    usage_pct: Math.round(finalUsagePct * 10) / 10,
     burn_rate: burnRate,
-    turns_left: turnsLeft,
+    turns_left: finalTurnsLeft,
     estimated_cost_usd: Math.round(estimatedCostUsd * 10000) / 10000,
     cache_efficiency: Math.round(cacheEfficiency * 100) / 100,
     total_turns: inputTokenReadings.length,

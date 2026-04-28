@@ -75,14 +75,17 @@ cat | STATE_DIR="$STATE_DIR" node -e "
 
   console.log(parts.join(' · '));
 
-  // Persist the real context limit from Claude Code into state so analyze.js can use it
+  // Persist the real context data from Claude Code into state so check.sh / analyze.js can use it
   if (sessionId && limit > 0) {
     try {
       const stateFile = stateDir + '/' + sessionId + '.json';
       let state = {};
       try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch(_) {}
-      if (state.context_limit !== limit) {
-        state.context_limit = limit;
+      let changed = false;
+      if (state.context_limit !== limit) { state.context_limit = limit; changed = true; }
+      if (state.used_tokens !== used) { state.used_tokens = used; changed = true; }
+      if (state.used_percentage !== pct) { state.used_percentage = pct; changed = true; }
+      if (changed) {
         fs.mkdirSync(stateDir, { recursive: true });
         fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
       }
