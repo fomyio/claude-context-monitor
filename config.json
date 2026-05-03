@@ -3,6 +3,7 @@
   "relevance_eval_threshold_pct": 45,
   "anthropic_api_key_cmd": "cat ~/.anthropic_key",
   "context_limits": {
+    "claude-opus-4-7": 200000,
     "claude-opus-4-6": 200000,
     "claude-opus-4-5": 200000,
     "claude-opus-4": 200000,
@@ -11,6 +12,7 @@
     "claude-haiku-4-5": 200000
   },
   "model_prices_per_million_input": {
+    "claude-opus-4-7": 15.00,
     "claude-opus-4-6": 15.00,
     "claude-opus-4-5": 15.00,
     "claude-opus-4": 15.00,

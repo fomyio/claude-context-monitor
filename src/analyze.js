@@ -23,15 +23,23 @@ try {
 } catch (_) {}
 
 const CONTEXT_LIMITS = config.context_limits || {
-  'claude-sonnet-4-6': 200000,
-  'claude-haiku-4-5': 200000,
+  'claude-opus-4-7': 200000,
+  'claude-opus-4-6': 200000,
+  'claude-opus-4-5': 200000,
   'claude-opus-4': 200000,
+  'claude-sonnet-4-6': 200000,
+  'claude-sonnet-4-5': 200000,
+  'claude-haiku-4-5': 200000,
 };
 
 const MODEL_PRICES = config.model_prices_per_million_input || {
-  'claude-sonnet-4-6': 3.00,
-  'claude-haiku-4-5': 0.80,
+  'claude-opus-4-7': 15.00,
+  'claude-opus-4-6': 15.00,
+  'claude-opus-4-5': 15.00,
   'claude-opus-4': 15.00,
+  'claude-sonnet-4-6': 3.00,
+  'claude-sonnet-4-5': 3.00,
+  'claude-haiku-4-5': 0.80,
 };
 
 const BURN_RATE_WINDOW = config.burn_rate_window_turns || 4;
@@ -42,7 +50,7 @@ function getContextLimit(model, sessionId) {
   // 1. State file — written by statusline.sh with Claude Code's real limit (ground truth)
   if (sessionId) {
     try {
-      const stateDirCfg = config.state_dir || '~/.claude/context-monitor-state';
+      const stateDirCfg = config.state_dir || '~/.claude/plugins/context-monitor/state';
       const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
       const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
       if (state.context_limit > 0) return state.context_limit;
@@ -94,7 +102,7 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
   // system prompts, tool definitions, or injected status-line text.
   if (sessionId) {
     try {
-      const stateDirCfg = config.state_dir || '~/.claude/context-monitor-state';
+      const stateDirCfg = config.state_dir || '~/.claude/plugins/context-monitor/state';
       const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
       const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
       if (state.used_percentage != null && state.used_tokens != null) {
