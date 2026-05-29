@@ -45,12 +45,12 @@ STATE_DIR_CFG="$(node -e "
 STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/${SESSION_ID}.json"
 
-MODEL="$(node -e "
+MODEL="$(STATE_FILE="$STATE_FILE" node -e '
   try {
-    const s=JSON.parse(require('fs').readFileSync('$STATE_FILE','utf8'));
-    console.log(s.model ?? '');
-  } catch(_) { console.log(''); }
-" 2>/dev/null || echo '')"
+    const s=JSON.parse(require("fs").readFileSync(process.env.STATE_FILE,"utf8"));
+    console.log(s.model ?? "");
+  } catch(_) { console.log(""); }
+' 2>/dev/null || echo '')"
 
 # ── Analyze token usage ───────────────────────────────────────────────────────
 STATS="$(node "$ANALYZE" "$TRANSCRIPT_PATH" "$MODEL" "$SESSION_ID" 2>/dev/null || echo '{}')"
@@ -71,17 +71,17 @@ STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/${SESSION_ID}.json"
 
 # Read ground-truth values from state if available
-GROUND_TRUTH="$(node -e "
-  const fs = require('fs');
+GROUND_TRUTH="$(STATE_FILE="$STATE_FILE" node -e '
+  const fs = require("fs");
   try {
-    const s = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
+    const s = JSON.parse(fs.readFileSync(process.env.STATE_FILE, "utf8"));
     console.log(JSON.stringify({
       used_tokens: s.used_tokens ?? null,
       used_percentage: s.used_percentage ?? null,
       context_limit: s.context_limit ?? null
     }));
-  } catch(_) { console.log('{}'); }
-" 2>/dev/null || echo '{}')"
+  } catch(_) { console.log("{}"); }
+' 2>/dev/null || echo '{}')"
 
 TOKENS_MAX="$(echo "$STATS" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
@@ -179,27 +179,31 @@ check_and_notify_threshold() {
   local msg="$5"
   local flag_key="notified_${threshold}"
 
-  if node -e "
-    const pct = parseFloat('$pct');
-    const threshold = parseFloat('$threshold');
+  if PCT="$pct" THRESHOLD="$threshold" STATE_FILE="$STATE_FILE" FLAG_KEY="$flag_key" node -e '
+    const pct = parseFloat(process.env.PCT);
+    const threshold = parseFloat(process.env.THRESHOLD);
     if (pct < threshold) process.exit(1);
     try {
-      const fs=require('fs');
-      const state=JSON.parse(fs.readFileSync('$STATE_FILE','utf8'));
-      if (state['$flag_key']) process.exit(1); // already notified
+      const fs=require("fs");
+      const state=JSON.parse(fs.readFileSync(process.env.STATE_FILE,"utf8"));
+      if (state[process.env.FLAG_KEY]) process.exit(1); // already notified
     } catch(_) {}
     process.exit(0);
-  " 2>/dev/null; then
+  ' 2>/dev/null; then
     bash "$NOTIFY" "$level" "$title" "$msg" &
-    # Mark as notified in state
-    node -e "
-      const fs=require('fs');
+    # Mark as notified: re-read immediately before writing and flip only our flag,
+    # then write atomically — avoids clobbering fields a concurrent writer set.
+    STATE_FILE="$STATE_FILE" FLAG_KEY="$flag_key" node -e '
+      const fs=require("fs");
       try {
-        const state=JSON.parse(fs.readFileSync('$STATE_FILE','utf8'));
-        state['$flag_key']=true;
-        fs.writeFileSync('$STATE_FILE',JSON.stringify(state,null,2));
+        const stateFile=process.env.STATE_FILE;
+        const state=JSON.parse(fs.readFileSync(stateFile,"utf8"));
+        state[process.env.FLAG_KEY]=true;
+        const tmp=stateFile + ".tmp." + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(state,null,2));
+        fs.renameSync(tmp, stateFile);
       } catch(_){}
-    " 2>/dev/null || true
+    ' 2>/dev/null || true
   fi
 }
 

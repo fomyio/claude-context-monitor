@@ -98,6 +98,11 @@ node -e '
   let stats = {};
   try { stats = JSON.parse(process.env.STATS || "{}"); } catch (_) {}
 
+  // Read the state fresh immediately before mutating, then touch ONLY the fields
+  // this writer owns. Everything else is left exactly as read from disk so we
+  // never clobber a concurrent writer: statusline owns context_limit/used_*/
+  // model/model_display; advisor owns topics/active_task; post-compact owns
+  // compact_events/last_compact_*.
   let state;
   try {
     state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
@@ -105,7 +110,7 @@ node -e '
     state = { session_id: process.env.SESSION_ID, token_history: [], topics: [], last_compact_at_turn: 0, total_turns: 0, compact_events: [] };
   }
 
-  // Append to token history
+  // Append to token history (owned by this writer)
   state.token_history = state.token_history || [];
   state.token_history.push({
     timestamp: process.env.TIMESTAMP,
@@ -123,22 +128,11 @@ node -e '
 
   state.total_turns = stats.total_turns;
   state.transcript_path = process.env.TRANSCRIPT_PATH;
-  state.model = stats.model || state.model || "";
   state.last_assistant_message = (process.env.LAST_MSG || "").slice(0, 500);
   state.last_updated = process.env.TIMESTAMP;
-
-  // Preserve fields written by statusline.sh — re-read just before writing to
-  // avoid clobbering them in the concurrent read-modify-write race. statusline
-  // also tracks the live model/limit, so prefer those over the transcript model
-  // (which lags behind a mid-session model switch).
-  try {
-    const fresh = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-    if (fresh.context_limit) state.context_limit = fresh.context_limit;
-    if (fresh.used_tokens != null) state.used_tokens = fresh.used_tokens;
-    if (fresh.used_percentage != null) state.used_percentage = fresh.used_percentage;
-    if (fresh.model) state.model = fresh.model;
-    if (fresh.model_display) state.model_display = fresh.model_display;
-  } catch (_) {}
+  // statusline is authoritative for the live model; only fill in from the
+  // transcript-derived model when statusline has not set one yet.
+  if (!state.model) state.model = stats.model || "";
 
   // Atomic write: write to a temp file then rename (atomic on the same fs) so a
   // concurrent reader never observes a torn/partial JSON file.

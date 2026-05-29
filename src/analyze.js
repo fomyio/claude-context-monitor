@@ -110,12 +110,22 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
       const stateDirCfg = config.state_dir || '~/.claude/plugins/context-monitor/state';
       const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
       const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
-      if (state.used_percentage != null && state.used_tokens != null) {
-        groundTruth = {
-          used_tokens: state.used_tokens,
-          used_percentage: state.used_percentage,
-          context_limit: state.context_limit || null,
-        };
+      if (state.used_tokens != null) {
+        const limit = state.context_limit || null;
+        let pct = state.used_percentage;
+        // Recompute from the token ratio when the stored percentage is missing or
+        // a stale 0 while tokens are positive (defends against old state files /
+        // a statusline render that lacked used_percentage).
+        if ((pct == null || pct <= 0) && state.used_tokens > 0 && limit) {
+          pct = (state.used_tokens / limit) * 100;
+        }
+        if (pct != null) {
+          groundTruth = {
+            used_tokens: state.used_tokens,
+            used_percentage: pct,
+            context_limit: limit,
+          };
+        }
       }
     } catch (_) {}
   }
@@ -210,6 +220,8 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
   if (inputTokenReadings.length === 0) {
     return {
       tokens_used: 0,
+      tokens_input: 0,
+      tokens_output_est: 0,
       tokens_max: tokensMax,
       usage_pct: 0,
       burn_rate: 0,

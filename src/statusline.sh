@@ -20,10 +20,14 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const fs = require('fs');
   const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
 
-  const pct = input.context_window?.used_percentage ?? 0;
   const limit = input.context_window?.limit_tokens ?? 200000;
-  // used_tokens may be absent — derive from percentage when missing
-  const used = input.context_window?.used_tokens ?? Math.round(pct * limit / 100);
+  // Either used_tokens or used_percentage may be absent — derive whichever is
+  // missing from the other. (If only used_tokens is present we must NOT leave
+  // pct at 0, or the whole pressure pipeline silently reports an empty bar.)
+  const usedTokRaw = input.context_window?.used_tokens;
+  const pctRaw = input.context_window?.used_percentage;
+  const used = usedTokRaw ?? (pctRaw != null ? Math.round(pctRaw * limit / 100) : 0);
+  const pct = pctRaw ?? (limit > 0 ? (used / limit) * 100 : 0);
   // cost may live at session.cost, session.cost_usd, or cost.total_cost_usd
   const cost = input.session?.cost ?? input.session?.cost_usd ?? input.cost?.total_cost_usd ?? 0;
   const sessionId = input.session_id ?? '';

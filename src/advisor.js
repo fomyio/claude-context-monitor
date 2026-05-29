@@ -220,21 +220,33 @@ async function main() {
     outputText = `[CTX] 💡 Suggestion: You might want to /compact (${rationale})`;
   }
 
-  // 6. Save state for smart compact instructions (single write)
+  // 6. Save state for smart compact instructions.
+  // advisor held `state` across the (multi-second) Haiku call, so it is stale —
+  // a backgrounded Stop hook or statusline render may have written since. Re-read
+  // immediately before writing and mutate only advisor-OWNED fields on the fresh
+  // object, then write atomically. This avoids clobbering token_history /
+  // total_turns / model / used_* that other writers own.
   if (stateFile) {
     try {
-      // Track topic boundary shifts
+      let fresh;
+      try {
+        fresh = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+      } catch (_) {
+        fresh = state; // fall back to our snapshot if the file is unreadable
+      }
+
+      // Track topic boundary shifts (advisor-owned)
       if (evalResult && (evalResult.label === 'unrelated' || evalResult.label === 'drifted')) {
-        state.topics = state.topics || [];
-        state.topics.push({
-          turn: (state.total_turns || 0) + 1,
+        fresh.topics = fresh.topics || [];
+        fresh.topics.push({
+          turn: (fresh.total_turns || 0) + 1,
           label: evalResult.reason,
           shift_type: evalResult.label   // 'unrelated' | 'drifted'
         });
       }
 
-      // Persist active task state for pre-compact.sh
-      state.active_task = {
+      // Persist active task state for pre-compact.sh (advisor-owned)
+      fresh.active_task = {
         completion_status: completion.status, // 'complete' | 'partial' | 'ongoing'
         topic_label: evalResult ? evalResult.reason : null,
         topic_relevance: evalResult ? evalResult.label : null, // 'related' | 'drifted' | 'unrelated'
@@ -242,10 +254,9 @@ async function main() {
         updated_at: new Date().toISOString(),
       };
 
-      // Atomic write (temp + rename) — advisor runs on UserPromptSubmit,
-      // concurrent with the backgrounded Stop hook, so avoid torn reads.
+      // Atomic write (temp + rename)
       const tmp = stateFile + '.tmp.' + process.pid;
-      fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+      fs.writeFileSync(tmp, JSON.stringify(fresh, null, 2));
       fs.renameSync(tmp, stateFile);
     } catch (_) {}
   }

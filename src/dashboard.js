@@ -78,10 +78,14 @@ if (transcript_path) {
 // If no transcript or analysis returned nothing, use the latest token_history entry
 if (!stats.tokens_used && token_history.length > 0) {
   const last = token_history[token_history.length - 1];
-  // Derive tokens_max from usage_pct and tokens_used when possible
-  const derivedMax = (last.usage_pct > 0 && last.tokens_used > 0)
-    ? Math.round((last.tokens_used / last.usage_pct) * 100)
-    : (config.context_limits || {})[model] || 200000;
+  // Prefer the authoritative limit persisted by statusline; only reconstruct
+  // from usage_pct (which analyze.js clamps to 100, so it under-reports the max
+  // when real usage exceeded the limit) as a last resort.
+  const derivedMax = state.context_limit
+    || (config.context_limits || {})[model]
+    || ((last.usage_pct > 0 && last.tokens_used > 0)
+        ? Math.round((last.tokens_used / last.usage_pct) * 100)
+        : 200000);
   stats = {
     tokens_used: last.tokens_used || 0,
     tokens_max: derivedMax,

@@ -50,11 +50,15 @@ echo "$INPUT" | node -e "
 " > "$FULL_SUMMARY_FILE" 2>/dev/null || true
 
 # ── Update state: log compact event, save summary, reset token history ────────
-node -e "
+# Values passed via env (never interpolated into JS source): $TRIGGER comes from
+# the hook JSON and $STATE_FILE embeds the session id.
+STATE_FILE="$STATE_FILE" TRIGGER="$TRIGGER" TIMESTAMP="$TIMESTAMP" \
+FULL_SUMMARY_FILE="$FULL_SUMMARY_FILE" node -e "
   const fs = require('fs');
+  const stateFile = process.env.STATE_FILE;
   let state;
   try {
-    state = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
+    state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
   } catch(_) { process.exit(0); }
 
   const history = state.token_history || [];
@@ -62,13 +66,13 @@ node -e "
 
   // Read the full summary from temp file (written by the shell script above)
   let fullSummary = '';
-  try { fullSummary = fs.readFileSync('$FULL_SUMMARY_FILE', 'utf8').trim(); } catch(_) {}
+  try { fullSummary = fs.readFileSync(process.env.FULL_SUMMARY_FILE, 'utf8').trim(); } catch(_) {}
 
   // Log compact event (use first 100 chars of summary as preview)
   state.compact_events = state.compact_events || [];
   state.compact_events.push({
-    compacted_at: '$TIMESTAMP',
-    trigger: '$TRIGGER',
+    compacted_at: process.env.TIMESTAMP,
+    trigger: process.env.TRIGGER,
     pre_tokens: preTokens,
     turns_at_compact: state.total_turns,
     summary_preview: fullSummary.substring(0, 100),
@@ -83,7 +87,7 @@ node -e "
     const lastBreak = summary.lastIndexOf('\\n\\n', 2950);
     if (lastBreak > 1500) summary = summary.substring(0, lastBreak);
     state.last_compact_summary = summary;
-    state.last_compact_timestamp = '$TIMESTAMP';
+    state.last_compact_timestamp = process.env.TIMESTAMP;
     state.last_compact_turn = state.total_turns;
   }
 
@@ -91,7 +95,9 @@ node -e "
   state.token_history = [];
   state.last_compact_at_turn = state.total_turns;
 
-  fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
+  const tmp = stateFile + '.tmp.' + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+  fs.renameSync(tmp, stateFile);
 " 2>/dev/null || true
 
 # Clean up temp file
