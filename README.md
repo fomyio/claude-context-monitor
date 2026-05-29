@@ -21,7 +21,7 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin that watches
 
 <br/>
 
-**[Quick start](#quick-start)** · **[Features](#features)** · **[How it works](#how-the-scoring-works)** · **[Configuration](#configuration)** · **[Cost & privacy](#cost)** · **[Contributing](#contributing)**
+**[Quick start](#quick-start)** · **[Features](#features)** · **[How it works](#how-the-scoring-works)** · **[Configuration](#configuration)** · **[Cost](#cost)** · **[Privacy](#privacy)** · **[Contributing](#contributing)**
 
 </div>
 
@@ -461,7 +461,7 @@ The Haiku eval only activates **above 45%** context usage.
 | Normal use | **~$0.05 – $0.15** |
 | Heavy use (≈1000 turns/mo) | **~$0.50** |
 
-Each eval is a single ~60-token Haiku call. With the eval disabled (`relevance_eval_enabled: false`), the plugin costs **$0** to run.
+Each eval is a single Haiku call over a ~400–600 token conversation fingerprint (≈$0.0005). With the eval disabled (`relevance_eval_enabled: false`), the plugin costs **$0** to run.
 
 ---
 
