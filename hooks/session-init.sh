@@ -9,6 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 CONFIG="$PLUGIN_DIR/config.json"
 
+# Every step relies on node; bail cleanly if it is missing so an unguarded
+# `node ... ` write can't abort the script under `set -e`.
+command -v node >/dev/null 2>&1 || exit 0
+
 # ── Helper: read config value ─────────────────────────────────────────────────
 config_get() {
   node -e "
@@ -33,7 +37,7 @@ fi
 
 # ── Resolve state dir ─────────────────────────────────────────────────────────
 STATE_DIR_CFG="$(config_get state_dir "$HOME/.claude/plugins/context-monitor/state")"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 mkdir -p "$STATE_DIR"
 
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
@@ -60,7 +64,7 @@ const state = {
   active_task: null
 };
 fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
-" 2>/dev/null
+" 2>/dev/null || true
 
 # ── CLAUDE.md bloat check ─────────────────────────────────────────────────────
 CLAUDE_MD="$HOME/.claude/CLAUDE.md"

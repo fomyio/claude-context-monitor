@@ -12,7 +12,7 @@ STATE_DIR_CFG="$(node -e "
     console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
   } catch(_) { console.log('~/.claude/plugins/context-monitor/state'); }
 " 2>/dev/null || echo '~/.claude/plugins/context-monitor/state')"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 
 # Read session JSON from stdin and pipe safely to node (no shell expansion)
 # Pass STATE_DIR via env var to avoid embedding it in a JS string literal
@@ -24,9 +24,16 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const limit = input.context_window?.limit_tokens ?? 200000;
   // used_tokens may be absent — derive from percentage when missing
   const used = input.context_window?.used_tokens ?? Math.round(pct * limit / 100);
-  // cost may live at session.cost or session.cost_usd
-  const cost = input.session?.cost ?? input.session?.cost_usd ?? 0;
+  // cost may live at session.cost, session.cost_usd, or cost.total_cost_usd
+  const cost = input.session?.cost ?? input.session?.cost_usd ?? input.cost?.total_cost_usd ?? 0;
   const sessionId = input.session_id ?? '';
+
+  // Current model — Claude Code reports it as { id, display_name }, but tolerate
+  // a bare string. This is the authoritative live model and follows mid-session
+  // model switches, so we both display it and persist it as ground truth.
+  const modelRaw = input.model ?? '';
+  const modelId = (typeof modelRaw === 'object' ? modelRaw.id : modelRaw) || '';
+  const modelDisplay = (typeof modelRaw === 'object' ? (modelRaw.display_name || modelRaw.id) : modelRaw) || '';
 
   // Try to read plugin state for burn rate / turns left / cache efficiency
   let burnRate = 0;
@@ -72,6 +79,7 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   if (turnsLeft !== '?') parts.push('~' + turnsLeft + ' turns');
   parts.push(costStr);
   if (cacheEff !== null) parts.push('eff ' + cacheEff + '%');
+  if (modelDisplay) parts.push(modelDisplay);
 
   console.log(parts.join(' · '));
 
@@ -85,9 +93,13 @@ cat | STATE_DIR="$STATE_DIR" node -e "
       if (state.context_limit !== limit) { state.context_limit = limit; changed = true; }
       if (state.used_tokens !== used) { state.used_tokens = used; changed = true; }
       if (state.used_percentage !== pct) { state.used_percentage = pct; changed = true; }
+      if (modelId && state.model !== modelId) { state.model = modelId; changed = true; }
+      if (modelDisplay && state.model_display !== modelDisplay) { state.model_display = modelDisplay; changed = true; }
       if (changed) {
         fs.mkdirSync(stateDir, { recursive: true });
-        fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+        const tmp = stateFile + '.tmp.' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+        fs.renameSync(tmp, stateFile);
       }
     } catch(_) {}
   }

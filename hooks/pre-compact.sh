@@ -48,7 +48,7 @@ STATE_DIR_CFG="$(node -e "
   const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));
   console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
 " 2>/dev/null || echo "~/.claude/plugins/context-monitor/state")"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
 if [ ! -f "$STATE_FILE" ]; then

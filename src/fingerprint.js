@@ -72,7 +72,7 @@ function buildFingerprint(transcriptPath, maxHumanTurns = 5) {
     fingerprint += '(None)\n';
   } else {
     humanTurns.forEach((t, index) => {
-      fingerprint += \`[Turn -\${humanTurns.length - index}]: \${t}\n\`;
+      fingerprint += `[Turn -${humanTurns.length - index}]: ${t}\n`;
     });
   }
 

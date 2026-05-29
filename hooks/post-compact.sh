@@ -29,7 +29,7 @@ STATE_DIR_CFG="$(node -e "
   const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));
   console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
 " 2>/dev/null || echo "~/.claude/plugins/context-monitor/state")"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
 if [ ! -f "$STATE_FILE" ]; then exit 0; fi
@@ -40,7 +40,9 @@ TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 # Extract the full (non-truncated) summary from the input JSON and write to a
 # temp file so the node block below can read it without shell escaping issues.
 FULL_SUMMARY_FILE="$(mktemp)"
-trap "rm -f '$FULL_SUMMARY_FILE'" EXIT
+# Single-quote the trap body so the path is expanded at trap time with proper
+# quoting, surviving a TMPDIR that contains spaces or other odd characters.
+trap 'rm -f "$FULL_SUMMARY_FILE"' EXIT
 echo "$INPUT" | node -e "
   const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
   const s=d.compact_summary ?? d.summary ?? '';

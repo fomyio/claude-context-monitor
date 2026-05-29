@@ -101,19 +101,19 @@ async function runHaikuEval(fingerprint, newPrompt, apiKey) {
 
   const anthropic = new Anthropic({ apiKey });
 
-  const RELEVANCE_PROMPT = \`
+  const RELEVANCE_PROMPT = `
 You are an intelligent observer analyzing a conversation with an AI assistant.
 Your goal is to determine if the user's NEW PROMPT is a continuation of the same 
 technical task/context, OR if it represents a shift to a new, unrelated topic.
 
 Here is a summary of the recent conversation context:
 <context>
-\${fingerprint}
+${fingerprint}
 </context>
 
 Here is the user's new prompt:
 <new_prompt>
-\${newPrompt}
+${newPrompt}
 </new_prompt>
 
 Respond in strict JSON with no other text. Format:
@@ -122,18 +122,23 @@ Respond in strict JSON with no other text. Format:
   "label": "related" | "drifted" | "unrelated",
   "reason": "short 1-sentence reason"
 }
-\`;
+`;
 
   try {
     const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
+      model: config.eval_model || 'claude-haiku-4-5',
       max_tokens: 60,
       temperature: 0,
       messages: [{ role: 'user', content: RELEVANCE_PROMPT }]
     });
 
-    const responseText = msg.content[0].text;
-    const jsonMatch = responseText.match(/\\{.*\\}/s);
+    // Guard against an empty / non-text first block (refusal, tool_use, etc.)
+    const textBlock = Array.isArray(msg.content)
+      ? msg.content.find(b => b.type === 'text' && typeof b.text === 'string')
+      : null;
+    if (!textBlock) throw new Error('No text block in eval response');
+    const responseText = textBlock.text;
+    const jsonMatch = responseText.match(/\{.*\}/s);
     if (!jsonMatch) throw new Error('Invalid JSON from eval');
     
     const result = JSON.parse(jsonMatch[0]);
@@ -144,7 +149,7 @@ Respond in strict JSON with no other text. Format:
     };
   } catch (err) {
     // Fail semi-silently so we don't break the flow
-    return { score: 0.5, label: 'unknown', reason: \`Eval failed: \${err.message}\` };
+    return { score: 0.5, label: 'unknown', reason: `Eval failed: ${err.message}` };
   }
 }
 
@@ -201,18 +206,18 @@ async function main() {
 
   if (totalScore >= thresholds.block) {
     action = 'block';
-    outputText = \`[CTX] 🛑 COMPACT REQUIRED (Score \${totalScore}). Context limit imminent or complete topic shift.\`;
+    outputText = `[CTX] 🛑 COMPACT REQUIRED (Score ${totalScore}). Context limit imminent or complete topic shift.`;
   } else if (totalScore >= thresholds.urgent) {
-    outputText = \`[CTX] 🚨 URGENT: Strongly recommend running /compact now (Score \${totalScore}).\`;
+    outputText = `[CTX] 🚨 URGENT: Strongly recommend running /compact now (Score ${totalScore}).`;
   } else if (totalScore >= thresholds.warn) {
-    outputText = \`[CTX] ⚠️  Warning: Good time to /compact soon (Score \${totalScore}).\`;
+    outputText = `[CTX] ⚠️  Warning: Good time to /compact soon (Score ${totalScore}).`;
   } else if (totalScore >= thresholds.suggest) {
     let rationale = '';
     if (driftPts > 0) rationale = evalResult ? evalResult.reason : 'Topic drift detected';
     else if (taskPts > 0) rationale = 'Task appears complete';
     else rationale = 'Context pressure rising';
     
-    outputText = \`[CTX] 💡 Suggestion: You might want to /compact (\${rationale})\`;
+    outputText = `[CTX] 💡 Suggestion: You might want to /compact (${rationale})`;
   }
 
   // 6. Save state for smart compact instructions (single write)
@@ -222,7 +227,7 @@ async function main() {
       if (evalResult && (evalResult.label === 'unrelated' || evalResult.label === 'drifted')) {
         state.topics = state.topics || [];
         state.topics.push({
-          turn: state.total_turns + 1,
+          turn: (state.total_turns || 0) + 1,
           label: evalResult.reason,
           shift_type: evalResult.label   // 'unrelated' | 'drifted'
         });

@@ -59,8 +59,11 @@ function getContextLimit(model, sessionId) {
   // 2. config.json static table
   if (!model) return 200000;
   if (CONTEXT_LIMITS[model]) return CONTEXT_LIMITS[model];
+  // Match by family prefix only (e.g. "claude-opus-4-7-20250101" → "claude-opus-4-7").
+  // We do NOT match the other direction (key.startsWith(model)), or a short/unknown
+  // id like "claude" would silently inherit the first table entry's value.
   for (const [key, val] of Object.entries(CONTEXT_LIMITS)) {
-    if (model.startsWith(key) || key.startsWith(model)) return val;
+    if (model.startsWith(key)) return val;
   }
   return 200000;
 }
@@ -68,8 +71,10 @@ function getContextLimit(model, sessionId) {
 function getModelPrice(model) {
   if (!model) return 3.00;
   if (MODEL_PRICES[model]) return MODEL_PRICES[model];
+  // Prefix-only match (see getContextLimit) — an unknown model falls through to
+  // the default rather than being mispriced as the first (Opus) table entry.
   for (const [key, val] of Object.entries(MODEL_PRICES)) {
-    if (model.startsWith(key) || key.startsWith(model)) return val;
+    if (model.startsWith(key)) return val;
   }
   return 3.00;
 }
@@ -263,7 +268,11 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
     finalTokensUsed = groundTruth.used_tokens;
     finalTokensInput = groundTruth.used_tokens;
     finalTokensMax = groundTruth.context_limit || tokensMax;
-    finalUsagePct = (groundTruth.used_tokens / finalTokensMax) * 100;
+    // Prefer Claude Code's authoritative percentage; only recompute from the
+    // token ratio if it is missing. Clamp to 100 either way.
+    finalUsagePct = Math.min(100, groundTruth.used_percentage != null
+      ? groundTruth.used_percentage
+      : (groundTruth.used_tokens / finalTokensMax) * 100);
   }
   const finalTokensRemaining = Math.max(0, finalTokensMax - finalTokensUsed);
   const finalTurnsLeft = burnRate > 0 ? Math.floor(finalTokensRemaining / burnRate) : turnsLeft;

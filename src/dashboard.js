@@ -22,8 +22,10 @@ try {
   config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 } catch(_) {}
 
+const os = require('os');
 const stateDirCfg = config.state_dir || '~/.claude/plugins/context-monitor/state';
-const stateDir = stateDirCfg.replace(/^~/, process.env.HOME);
+// Fall back to os.homedir() so an unset $HOME doesn't yield "undefined/.claude/...".
+const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || os.homedir());
 
 // Find the most recent session state
 let latestSession = null;
@@ -56,6 +58,7 @@ try {
 const {
   session_id,
   model,
+  model_display,
   started_at,
   transcript_path,
   total_turns,
@@ -63,6 +66,9 @@ const {
   claude_md_tokens = 0,
   token_history = []
 } = state;
+
+// Friendly model label for display, e.g. "Opus 4.8"; fall back to the raw id.
+const modelLabel = model_display || model || 'unknown';
 
 // Get latest stats — try live transcript first, fall back to last recorded state
 let stats = {};
@@ -108,7 +114,7 @@ let topicsStr = topics.map(t => t.label).join(' → ');
 if (!topicsStr) topicsStr = 'General';
 
 console.log(`
-Session: ${total_turns} turns | ${uptimeMin} min | ${model || 'unknown'}
+Session: ${total_turns} turns | ${uptimeMin} min | ${modelLabel}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Context:  [${bar}]  ${usagePct}%  (${usedK}K / ${maxK}K)
 Cost:     ~$${cost.toFixed(3)} this session  |  Cache eff: ${Math.round(eff * 100)}%
