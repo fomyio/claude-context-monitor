@@ -6,7 +6,7 @@
 
 A Claude Code plugin that watches your context window in real-time, predicts when you'll hit the limit, and tells you *before* it's too late — then makes your `/compact` actually remember what matters.
 
-[![Version](https://img.shields.io/badge/version-1.1.2-blue)](https://github.com/fomyio/claude-context-monitor/releases)
+[![Version](https://img.shields.io/badge/version-1.1.3-blue)](https://github.com/fomyio/claude-context-monitor/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](#)
@@ -62,11 +62,13 @@ Alerts at 70%, 85%, and 95% context usage — so you're never caught off guard e
 
 ### 5. Status line integration
 
-A real-time status bar in Claude Code's UI showing context usage, turns left, estimated cost, and cache efficiency:
+A real-time status bar in Claude Code's UI showing context usage, turns left, estimated cost, cache efficiency, and the active model:
 
 ```
-🟢 [████░░░░░░░░░░░░░░░░] 22.1% · 44K/200K · ~124 turns · $0.012 · eff 74%
+🟢 [████░░░░░░░░░░░░░░░░] 22.1% · 44K/200K · ~124 turns · $0.012 · eff 74% · Opus 4.8
 ```
+
+The model label tracks the live model and updates immediately if you switch models mid-session — the context-window size shown is always the limit for the model currently in use.
 
 ---
 
@@ -216,7 +218,7 @@ Status line (real-time, from Claude Code UI)
   └── statusline.sh
         Reads Claude Code's native context_window data
         Augments with plugin burn rate + turns left + cache efficiency
-        Displays: 🟢 [████░░░] 22.1% · 44K/200K · ~124 turns · $0.012 · eff 74%
+        Displays: 🟢 [████░░░] 22.1% · 44K/200K · ~124 turns · $0.012 · eff 74% · Opus 4.8
 ```
 
 ---
@@ -306,6 +308,7 @@ All settings live in `config.json`. The defaults work well out of the box, but h
 
   // Per-model context limits (tokens)
   "context_limits": {
+    "claude-opus-4-7": 200000,
     "claude-opus-4-6": 200000,
     "claude-opus-4-5": 200000,
     "claude-opus-4": 200000,
@@ -316,6 +319,7 @@ All settings live in `config.json`. The defaults work well out of the box, but h
 
   // Per-model pricing (USD per million input tokens)
   "model_prices_per_million_input": {
+    "claude-opus-4-7": 15.00,
     "claude-opus-4-6": 15.00,
     "claude-opus-4-5": 15.00,
     "claude-opus-4": 15.00,

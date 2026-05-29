@@ -9,6 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
 CONFIG="$PLUGIN_DIR/config.json"
 
+# Every step relies on node; bail cleanly if it is missing so an unguarded
+# `node ... ` write can't abort the script under `set -e`.
+command -v node >/dev/null 2>&1 || exit 0
+
 # ── Helper: read config value ─────────────────────────────────────────────────
 config_get() {
   node -e "
@@ -33,34 +37,41 @@ fi
 
 # ── Resolve state dir ─────────────────────────────────────────────────────────
 STATE_DIR_CFG="$(config_get state_dir "$HOME/.claude/plugins/context-monitor/state")"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 mkdir -p "$STATE_DIR"
 
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
 # ── Create initial state file ─────────────────────────────────────────────────
+# Values are passed via the environment (never interpolated into JS source) so a
+# session id, model, or transcript path containing quotes/backticks/${} cannot
+# break the write or execute code. Written atomically (temp + rename).
 STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-node -e "
-const fs = require('fs');
+SESSION_ID="$SESSION_ID" MODEL="$MODEL" STARTED_AT="$STARTED_AT" \
+TRANSCRIPT_PATH="$TRANSCRIPT_PATH" STATE_FILE="$STATE_FILE" node -e '
+const fs = require("fs");
+const stateFile = process.env.STATE_FILE;
 const state = {
-  session_id: '$SESSION_ID',
-  model: '$MODEL',
-  started_at: '$STARTED_AT',
-  transcript_path: '$TRANSCRIPT_PATH',
+  session_id: process.env.SESSION_ID,
+  model: process.env.MODEL || "",
+  started_at: process.env.STARTED_AT,
+  transcript_path: process.env.TRANSCRIPT_PATH || "",
   token_history: [],
   topics: [],
   last_compact_at_turn: 0,
   total_turns: 0,
-  last_assistant_message: '',
+  last_assistant_message: "",
   claude_md_tokens: 0,
   compact_events: [],
-  last_compact_summary: '',
+  last_compact_summary: "",
   last_compact_timestamp: null,
   last_compact_turn: null,
   active_task: null
 };
-fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
-" 2>/dev/null
+const tmp = stateFile + ".tmp." + process.pid;
+fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+fs.renameSync(tmp, stateFile);
+' 2>/dev/null || true
 
 # ── CLAUDE.md bloat check ─────────────────────────────────────────────────────
 CLAUDE_MD="$HOME/.claude/CLAUDE.md"
@@ -77,16 +88,18 @@ check_claude_md_bloat() {
   local size_bytes
   size_bytes="$(wc -c < "$md_path" | tr -d ' ')"
   local model_limit
-  model_limit="$(node -e "
-    const c = JSON.parse(require('fs').readFileSync('$CONFIG', 'utf8'));
-    const m = '$MODEL' || 'claude-sonnet-4-6';
+  model_limit="$(MODEL="$MODEL" CONFIG="$CONFIG" node -e '
+    const c = JSON.parse(require("fs").readFileSync(process.env.CONFIG, "utf8"));
+    const m = process.env.MODEL || "claude-sonnet-4-6";
     const limits = c.context_limits || {};
     let limit = 200000;
+    // Prefix-only match (mirrors analyze.js): an unknown/short model id falls
+    // through to the default rather than inheriting the first table entry.
     for (const [k,v] of Object.entries(limits)) {
-      if (m.startsWith(k) || k.startsWith(m)) { limit = v; break; }
+      if (m.startsWith(k)) { limit = v; break; }
     }
     console.log(limit);
-  " 2>/dev/null || echo 200000)"
+  ' 2>/dev/null || echo 200000)"
 
   # Estimate tokens: chars / 3.5
   local est_tokens
@@ -98,13 +111,16 @@ check_claude_md_bloat() {
     echo "[CTX] ⚠️  $label is large (~${est_tokens} tokens = $(( est_tokens * 100 / model_limit ))% of context). Consider trimming it."
   fi
 
-  # Persist to state
-  node -e "
-    const fs = require('fs');
-    const state = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
-    state.claude_md_tokens = $est_tokens;
-    fs.writeFileSync('$STATE_FILE', JSON.stringify(state, null, 2));
-  " 2>/dev/null || true
+  # Persist to state (env + atomic write, consistent with the rest of the hooks)
+  EST_TOKENS="$est_tokens" STATE_FILE="$STATE_FILE" node -e '
+    const fs = require("fs");
+    const stateFile = process.env.STATE_FILE;
+    const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+    state.claude_md_tokens = parseInt(process.env.EST_TOKENS, 10) || 0;
+    const tmp = stateFile + ".tmp." + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+    fs.renameSync(tmp, stateFile);
+  ' 2>/dev/null || true
 }
 
 check_claude_md_bloat "$CLAUDE_MD" "~/.claude/CLAUDE.md"

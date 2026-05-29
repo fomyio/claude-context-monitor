@@ -48,7 +48,7 @@ STATE_DIR_CFG="$(node -e "
   const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));
   console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
 " 2>/dev/null || echo "~/.claude/plugins/context-monitor/state")"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
 if [ ! -f "$STATE_FILE" ]; then
@@ -60,11 +60,11 @@ fi
 # ── Build dynamic compact instructions ─────────────────────────────────────────
 # Uses node to read the state file and produce the instruction block, avoiding
 # shell escaping issues with the compact summary content.
-node -e "
+STATE_FILE="$STATE_FILE" node -e "
   const fs = require('fs');
   let state;
   try {
-    state = JSON.parse(fs.readFileSync('$STATE_FILE', 'utf8'));
+    state = JSON.parse(fs.readFileSync(process.env.STATE_FILE, 'utf8'));
   } catch(_) {
     // Fall back to static policy
     console.log('Context Monitor Policy: When summarizing this session, please explicitly preserve:');

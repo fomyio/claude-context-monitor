@@ -22,8 +22,10 @@ try {
   config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 } catch(_) {}
 
+const os = require('os');
 const stateDirCfg = config.state_dir || '~/.claude/plugins/context-monitor/state';
-const stateDir = stateDirCfg.replace(/^~/, process.env.HOME);
+// Fall back to os.homedir() so an unset $HOME doesn't yield "undefined/.claude/...".
+const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || os.homedir());
 
 // Find the most recent session state
 let latestSession = null;
@@ -56,6 +58,7 @@ try {
 const {
   session_id,
   model,
+  model_display,
   started_at,
   transcript_path,
   total_turns,
@@ -63,6 +66,9 @@ const {
   claude_md_tokens = 0,
   token_history = []
 } = state;
+
+// Friendly model label for display, e.g. "Opus 4.8"; fall back to the raw id.
+const modelLabel = model_display || model || 'unknown';
 
 // Get latest stats — try live transcript first, fall back to last recorded state
 let stats = {};
@@ -72,10 +78,14 @@ if (transcript_path) {
 // If no transcript or analysis returned nothing, use the latest token_history entry
 if (!stats.tokens_used && token_history.length > 0) {
   const last = token_history[token_history.length - 1];
-  // Derive tokens_max from usage_pct and tokens_used when possible
-  const derivedMax = (last.usage_pct > 0 && last.tokens_used > 0)
-    ? Math.round((last.tokens_used / last.usage_pct) * 100)
-    : (config.context_limits || {})[model] || 200000;
+  // Prefer the authoritative limit persisted by statusline; only reconstruct
+  // from usage_pct (which analyze.js clamps to 100, so it under-reports the max
+  // when real usage exceeded the limit) as a last resort.
+  const derivedMax = state.context_limit
+    || (config.context_limits || {})[model]
+    || ((last.usage_pct > 0 && last.tokens_used > 0)
+        ? Math.round((last.tokens_used / last.usage_pct) * 100)
+        : 200000);
   stats = {
     tokens_used: last.tokens_used || 0,
     tokens_max: derivedMax,
@@ -108,7 +118,7 @@ let topicsStr = topics.map(t => t.label).join(' → ');
 if (!topicsStr) topicsStr = 'General';
 
 console.log(`
-Session: ${total_turns} turns | ${uptimeMin} min | ${model || 'unknown'}
+Session: ${total_turns} turns | ${uptimeMin} min | ${modelLabel}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Context:  [${bar}]  ${usagePct}%  (${usedK}K / ${maxK}K)
 Cost:     ~$${cost.toFixed(3)} this session  |  Cache eff: ${Math.round(eff * 100)}%

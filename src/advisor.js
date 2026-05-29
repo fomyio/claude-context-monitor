@@ -101,19 +101,19 @@ async function runHaikuEval(fingerprint, newPrompt, apiKey) {
 
   const anthropic = new Anthropic({ apiKey });
 
-  const RELEVANCE_PROMPT = \`
+  const RELEVANCE_PROMPT = `
 You are an intelligent observer analyzing a conversation with an AI assistant.
 Your goal is to determine if the user's NEW PROMPT is a continuation of the same 
 technical task/context, OR if it represents a shift to a new, unrelated topic.
 
 Here is a summary of the recent conversation context:
 <context>
-\${fingerprint}
+${fingerprint}
 </context>
 
 Here is the user's new prompt:
 <new_prompt>
-\${newPrompt}
+${newPrompt}
 </new_prompt>
 
 Respond in strict JSON with no other text. Format:
@@ -122,18 +122,23 @@ Respond in strict JSON with no other text. Format:
   "label": "related" | "drifted" | "unrelated",
   "reason": "short 1-sentence reason"
 }
-\`;
+`;
 
   try {
     const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
+      model: config.eval_model || 'claude-haiku-4-5',
       max_tokens: 60,
       temperature: 0,
       messages: [{ role: 'user', content: RELEVANCE_PROMPT }]
     });
 
-    const responseText = msg.content[0].text;
-    const jsonMatch = responseText.match(/\\{.*\\}/s);
+    // Guard against an empty / non-text first block (refusal, tool_use, etc.)
+    const textBlock = Array.isArray(msg.content)
+      ? msg.content.find(b => b.type === 'text' && typeof b.text === 'string')
+      : null;
+    if (!textBlock) throw new Error('No text block in eval response');
+    const responseText = textBlock.text;
+    const jsonMatch = responseText.match(/\{.*\}/s);
     if (!jsonMatch) throw new Error('Invalid JSON from eval');
     
     const result = JSON.parse(jsonMatch[0]);
@@ -144,7 +149,7 @@ Respond in strict JSON with no other text. Format:
     };
   } catch (err) {
     // Fail semi-silently so we don't break the flow
-    return { score: 0.5, label: 'unknown', reason: \`Eval failed: \${err.message}\` };
+    return { score: 0.5, label: 'unknown', reason: `Eval failed: ${err.message}` };
   }
 }
 
@@ -201,35 +206,47 @@ async function main() {
 
   if (totalScore >= thresholds.block) {
     action = 'block';
-    outputText = \`[CTX] 🛑 COMPACT REQUIRED (Score \${totalScore}). Context limit imminent or complete topic shift.\`;
+    outputText = `[CTX] 🛑 COMPACT REQUIRED (Score ${totalScore}). Context limit imminent or complete topic shift.`;
   } else if (totalScore >= thresholds.urgent) {
-    outputText = \`[CTX] 🚨 URGENT: Strongly recommend running /compact now (Score \${totalScore}).\`;
+    outputText = `[CTX] 🚨 URGENT: Strongly recommend running /compact now (Score ${totalScore}).`;
   } else if (totalScore >= thresholds.warn) {
-    outputText = \`[CTX] ⚠️  Warning: Good time to /compact soon (Score \${totalScore}).\`;
+    outputText = `[CTX] ⚠️  Warning: Good time to /compact soon (Score ${totalScore}).`;
   } else if (totalScore >= thresholds.suggest) {
     let rationale = '';
     if (driftPts > 0) rationale = evalResult ? evalResult.reason : 'Topic drift detected';
     else if (taskPts > 0) rationale = 'Task appears complete';
     else rationale = 'Context pressure rising';
     
-    outputText = \`[CTX] 💡 Suggestion: You might want to /compact (\${rationale})\`;
+    outputText = `[CTX] 💡 Suggestion: You might want to /compact (${rationale})`;
   }
 
-  // 6. Save state for smart compact instructions (single write)
+  // 6. Save state for smart compact instructions.
+  // advisor held `state` across the (multi-second) Haiku call, so it is stale —
+  // a backgrounded Stop hook or statusline render may have written since. Re-read
+  // immediately before writing and mutate only advisor-OWNED fields on the fresh
+  // object, then write atomically. This avoids clobbering token_history /
+  // total_turns / model / used_* that other writers own.
   if (stateFile) {
     try {
-      // Track topic boundary shifts
+      let fresh;
+      try {
+        fresh = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+      } catch (_) {
+        fresh = state; // fall back to our snapshot if the file is unreadable
+      }
+
+      // Track topic boundary shifts (advisor-owned)
       if (evalResult && (evalResult.label === 'unrelated' || evalResult.label === 'drifted')) {
-        state.topics = state.topics || [];
-        state.topics.push({
-          turn: state.total_turns + 1,
+        fresh.topics = fresh.topics || [];
+        fresh.topics.push({
+          turn: (fresh.total_turns || 0) + 1,
           label: evalResult.reason,
           shift_type: evalResult.label   // 'unrelated' | 'drifted'
         });
       }
 
-      // Persist active task state for pre-compact.sh
-      state.active_task = {
+      // Persist active task state for pre-compact.sh (advisor-owned)
+      fresh.active_task = {
         completion_status: completion.status, // 'complete' | 'partial' | 'ongoing'
         topic_label: evalResult ? evalResult.reason : null,
         topic_relevance: evalResult ? evalResult.label : null, // 'related' | 'drifted' | 'unrelated'
@@ -237,7 +254,10 @@ async function main() {
         updated_at: new Date().toISOString(),
       };
 
-      fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+      // Atomic write (temp + rename)
+      const tmp = stateFile + '.tmp.' + process.pid;
+      fs.writeFileSync(tmp, JSON.stringify(fresh, null, 2));
+      fs.renameSync(tmp, stateFile);
     } catch (_) {}
   }
 

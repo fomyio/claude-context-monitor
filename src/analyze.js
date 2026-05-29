@@ -59,8 +59,11 @@ function getContextLimit(model, sessionId) {
   // 2. config.json static table
   if (!model) return 200000;
   if (CONTEXT_LIMITS[model]) return CONTEXT_LIMITS[model];
+  // Match by family prefix only (e.g. "claude-opus-4-7-20250101" → "claude-opus-4-7").
+  // We do NOT match the other direction (key.startsWith(model)), or a short/unknown
+  // id like "claude" would silently inherit the first table entry's value.
   for (const [key, val] of Object.entries(CONTEXT_LIMITS)) {
-    if (model.startsWith(key) || key.startsWith(model)) return val;
+    if (model.startsWith(key)) return val;
   }
   return 200000;
 }
@@ -68,8 +71,10 @@ function getContextLimit(model, sessionId) {
 function getModelPrice(model) {
   if (!model) return 3.00;
   if (MODEL_PRICES[model]) return MODEL_PRICES[model];
+  // Prefix-only match (see getContextLimit) — an unknown model falls through to
+  // the default rather than being mispriced as the first (Opus) table entry.
   for (const [key, val] of Object.entries(MODEL_PRICES)) {
-    if (model.startsWith(key) || key.startsWith(model)) return val;
+    if (model.startsWith(key)) return val;
   }
   return 3.00;
 }
@@ -105,12 +110,22 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
       const stateDirCfg = config.state_dir || '~/.claude/plugins/context-monitor/state';
       const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
       const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
-      if (state.used_percentage != null && state.used_tokens != null) {
-        groundTruth = {
-          used_tokens: state.used_tokens,
-          used_percentage: state.used_percentage,
-          context_limit: state.context_limit || null,
-        };
+      if (state.used_tokens != null) {
+        const limit = state.context_limit || null;
+        let pct = state.used_percentage;
+        // Recompute from the token ratio when the stored percentage is missing or
+        // a stale 0 while tokens are positive (defends against old state files /
+        // a statusline render that lacked used_percentage).
+        if ((pct == null || pct <= 0) && state.used_tokens > 0 && limit) {
+          pct = (state.used_tokens / limit) * 100;
+        }
+        if (pct != null) {
+          groundTruth = {
+            used_tokens: state.used_tokens,
+            used_percentage: pct,
+            context_limit: limit,
+          };
+        }
       }
     } catch (_) {}
   }
@@ -205,6 +220,8 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
   if (inputTokenReadings.length === 0) {
     return {
       tokens_used: 0,
+      tokens_input: 0,
+      tokens_output_est: 0,
       tokens_max: tokensMax,
       usage_pct: 0,
       burn_rate: 0,
@@ -263,7 +280,11 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
     finalTokensUsed = groundTruth.used_tokens;
     finalTokensInput = groundTruth.used_tokens;
     finalTokensMax = groundTruth.context_limit || tokensMax;
-    finalUsagePct = (groundTruth.used_tokens / finalTokensMax) * 100;
+    // Prefer Claude Code's authoritative percentage; only recompute from the
+    // token ratio if it is missing. Clamp to 100 either way.
+    finalUsagePct = Math.min(100, groundTruth.used_percentage != null
+      ? groundTruth.used_percentage
+      : (groundTruth.used_tokens / finalTokensMax) * 100);
   }
   const finalTokensRemaining = Math.max(0, finalTokensMax - finalTokensUsed);
   const finalTurnsLeft = burnRate > 0 ? Math.floor(finalTokensRemaining / burnRate) : turnsLeft;

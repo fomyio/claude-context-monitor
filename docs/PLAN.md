@@ -214,9 +214,12 @@ In `session-init.sh`, compute size of CLAUDE.md and all `@import`-ed files.
 - If > 15% of model limit: warn user
 - Log to state for dashboard display
 
-### 3.4 Auto-compact Mode (opt-in)
-In `config.json`: `"auto_compact_enabled": false`
-When `compact_score > config.auto_compact_threshold_pct` AND user opt-in:
+### 3.4 Auto-compact Mode (opt-in) — *planned, not yet implemented*
+> The `auto_compact_*` keys below are a future design; they are intentionally
+> NOT present in the shipped `config.json` and are read by no code today.
+
+Planned: in `config.json`: `"auto_compact_enabled": false`
+When `compact_score > config.auto_compact_threshold_score` AND user opt-in:
 - Use `UserPromptSubmit` `decision: "block"` with `reason: "[Auto-compact running...]"`
 - Trigger compact via shell (not directly possible via hooks — surface as instruction to Claude)
 
@@ -258,8 +261,6 @@ set -g status-right '#(cat /tmp/claude-ctx-status 2>/dev/null)'
     "block": 80
   },
   "block_on_critical": false,
-  "auto_compact_enabled": false,
-  "auto_compact_threshold_score": 85,
   "tmux_status_enabled": false,
   "tmux_status_file": "/tmp/claude-ctx-status",
   "fingerprint_max_turns": 5,

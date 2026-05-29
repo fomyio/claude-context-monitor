@@ -11,6 +11,10 @@ CONFIG="$PLUGIN_DIR/config.json"
 ANALYZE="$PLUGIN_DIR/src/analyze.js"
 NOTIFY="$PLUGIN_DIR/src/notify.sh"
 
+# node is a hard dependency for every step below — bail out cleanly if absent
+# so the hook never aborts mid-write under `set -e`.
+command -v node >/dev/null 2>&1 || exit 0
+
 INPUT="$(cat)"
 
 SESSION_ID="$(echo "$INPUT" | node -e "
@@ -41,21 +45,25 @@ STATE_DIR_CFG="$(node -e "
   const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));
   console.log(c.state_dir ?? '~/.claude/plugins/context-monitor/state');
 " 2>/dev/null || echo "~/.claude/plugins/context-monitor/state")"
-STATE_DIR="${STATE_DIR_CFG/\~/$HOME}"
+STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
-# Create state file if it doesn't exist (e.g. session-init didn't run)
+# Create state file if it doesn't exist (e.g. session-init didn't run).
+# Session id passed via env, written atomically — consistent with the main write.
 if [ ! -f "$STATE_FILE" ]; then
   mkdir -p "$STATE_DIR"
-  node -e "
-    const fs=require('fs');
-    fs.writeFileSync('$STATE_FILE', JSON.stringify({
-      session_id:'$SESSION_ID', token_history:[], topics:[],
-      last_compact_at_turn:0, total_turns:0, last_assistant_message:'',
-      compact_events:[], last_compact_summary:'', last_compact_timestamp:null,
+  SESSION_ID="$SESSION_ID" STATE_FILE="$STATE_FILE" node -e '
+    const fs=require("fs");
+    const stateFile=process.env.STATE_FILE;
+    const tmp=stateFile + ".tmp." + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify({
+      session_id:process.env.SESSION_ID, token_history:[], topics:[],
+      last_compact_at_turn:0, total_turns:0, last_assistant_message:"",
+      compact_events:[], last_compact_summary:"", last_compact_timestamp:null,
       last_compact_turn:null, active_task:null
     }, null, 2));
-  " 2>/dev/null || true
+    fs.renameSync(tmp, stateFile);
+  ' 2>/dev/null || true
 fi
 
 # ── Get token stats ───────────────────────────────────────────────────────────
@@ -73,25 +81,39 @@ if [ "$STATS" = '{}' ] || [ -z "$STATS" ]; then exit 0; fi
 # ── Persist stats to state ────────────────────────────────────────────────────
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Sanitise paths that get embedded in JS string literals (strip single quotes)
-SAFE_TRANSCRIPT="${TRANSCRIPT_PATH//\'/}"
-SAFE_STATE_FILE="${STATE_FILE//\'/}"
-SAFE_SESSION_ID="${SESSION_ID//\'/}"
+# All shell→JS values are passed through the environment and read with
+# process.env inside node. We never interpolate them into the JS source, so
+# content containing backticks, ${...}, quotes, etc. is treated as plain data
+# (no syntax errors, no code execution) — see the injection that the old
+# `const stats = $STATS` / `\`$LAST_MSG\`` interpolation allowed.
+STATS="$STATS" \
+LAST_MSG="$LAST_MSG" \
+STATE_FILE="$STATE_FILE" \
+SESSION_ID="$SESSION_ID" \
+TRANSCRIPT_PATH="$TRANSCRIPT_PATH" \
+TIMESTAMP="$TIMESTAMP" \
+node -e '
+  const fs = require("fs");
+  const stateFile = process.env.STATE_FILE;
+  let stats = {};
+  try { stats = JSON.parse(process.env.STATS || "{}"); } catch (_) {}
 
-node -e "
-  const fs = require('fs');
-  const stats = $STATS;
+  // Read the state fresh immediately before mutating, then touch ONLY the fields
+  // this writer owns. Everything else is left exactly as read from disk so we
+  // never clobber a concurrent writer: statusline owns context_limit/used_*/
+  // model/model_display; advisor owns topics/active_task; post-compact owns
+  // compact_events/last_compact_*.
   let state;
   try {
-    state = JSON.parse(fs.readFileSync('$SAFE_STATE_FILE', 'utf8'));
-  } catch(_) {
-    state = { session_id: '$SAFE_SESSION_ID', token_history: [], topics: [], last_compact_at_turn: 0, total_turns: 0, compact_events: [] };
+    state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  } catch (_) {
+    state = { session_id: process.env.SESSION_ID, token_history: [], topics: [], last_compact_at_turn: 0, total_turns: 0, compact_events: [] };
   }
 
-  // Append to token history
+  // Append to token history (owned by this writer)
   state.token_history = state.token_history || [];
   state.token_history.push({
-    timestamp: '$TIMESTAMP',
+    timestamp: process.env.TIMESTAMP,
     tokens_used: stats.tokens_used,
     tokens_input: stats.tokens_input,
     usage_pct: stats.usage_pct,
@@ -105,20 +127,19 @@ node -e "
   }
 
   state.total_turns = stats.total_turns;
-  state.transcript_path = '$SAFE_TRANSCRIPT';
-  state.model = stats.model || state.model || '';
-  state.last_assistant_message = \`$LAST_MSG\`.substring(0, 500);
-  state.last_updated = '$TIMESTAMP';
+  state.transcript_path = process.env.TRANSCRIPT_PATH;
+  state.last_assistant_message = (process.env.LAST_MSG || "").slice(0, 500);
+  state.last_updated = process.env.TIMESTAMP;
+  // statusline is authoritative for the live model; only fill in from the
+  // transcript-derived model when statusline has not set one yet.
+  if (!state.model) state.model = stats.model || "";
 
-  // Preserve context_limit written by statusline.sh — re-read before write to
-  // avoid clobbering it in the concurrent read-modify-write race
-  try {
-    const fresh = JSON.parse(fs.readFileSync('$SAFE_STATE_FILE', 'utf8'));
-    if (fresh.context_limit) state.context_limit = fresh.context_limit;
-  } catch(_) {}
-
-  fs.writeFileSync('$SAFE_STATE_FILE', JSON.stringify(state, null, 2));
-" 2>/dev/null || true
+  // Atomic write: write to a temp file then rename (atomic on the same fs) so a
+  // concurrent reader never observes a torn/partial JSON file.
+  const tmp = stateFile + ".tmp." + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+  fs.renameSync(tmp, stateFile);
+' 2>/dev/null || true
 
 # ── Tmux status bar integration (opt-in) ─────────────────────────────────────
 TMUX_ENABLED="$(node -e "
