@@ -48,18 +48,22 @@ STATE_DIR_CFG="$(node -e "
 STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 STATE_FILE="$STATE_DIR/$SESSION_ID.json"
 
-# Create state file if it doesn't exist (e.g. session-init didn't run)
+# Create state file if it doesn't exist (e.g. session-init didn't run).
+# Session id passed via env, written atomically — consistent with the main write.
 if [ ! -f "$STATE_FILE" ]; then
   mkdir -p "$STATE_DIR"
-  node -e "
-    const fs=require('fs');
-    fs.writeFileSync('$STATE_FILE', JSON.stringify({
-      session_id:'$SESSION_ID', token_history:[], topics:[],
-      last_compact_at_turn:0, total_turns:0, last_assistant_message:'',
-      compact_events:[], last_compact_summary:'', last_compact_timestamp:null,
+  SESSION_ID="$SESSION_ID" STATE_FILE="$STATE_FILE" node -e '
+    const fs=require("fs");
+    const stateFile=process.env.STATE_FILE;
+    const tmp=stateFile + ".tmp." + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify({
+      session_id:process.env.SESSION_ID, token_history:[], topics:[],
+      last_compact_at_turn:0, total_turns:0, last_assistant_message:"",
+      compact_events:[], last_compact_summary:"", last_compact_timestamp:null,
       last_compact_turn:null, active_task:null
     }, null, 2));
-  " 2>/dev/null || true
+    fs.renameSync(tmp, stateFile);
+  ' 2>/dev/null || true
 fi
 
 # ── Get token stats ───────────────────────────────────────────────────────────

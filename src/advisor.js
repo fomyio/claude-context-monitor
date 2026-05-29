@@ -242,7 +242,11 @@ async function main() {
         updated_at: new Date().toISOString(),
       };
 
-      fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+      // Atomic write (temp + rename) — advisor runs on UserPromptSubmit,
+      // concurrent with the backgrounded Stop hook, so avoid torn reads.
+      const tmp = stateFile + '.tmp.' + process.pid;
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+      fs.renameSync(tmp, stateFile);
     } catch (_) {}
   }
 
