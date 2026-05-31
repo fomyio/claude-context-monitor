@@ -20,24 +20,35 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const fs = require('fs');
   const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
 
-  const limit = input.context_window?.limit_tokens ?? 200000;
-  // Either used_tokens or used_percentage may be absent — derive whichever is
-  // missing from the other. (If only used_tokens is present we must NOT leave
-  // pct at 0, or the whole pressure pipeline silently reports an empty bar.)
-  const usedTokRaw = input.context_window?.used_tokens;
-  const pctRaw = input.context_window?.used_percentage;
-  const used = usedTokRaw ?? (pctRaw != null ? Math.round(pctRaw * limit / 100) : 0);
-  const pct = pctRaw ?? (limit > 0 ? (used / limit) * 100 : 0);
-  // cost may live at session.cost, session.cost_usd, or cost.total_cost_usd
-  const cost = input.session?.cost ?? input.session?.cost_usd ?? input.cost?.total_cost_usd ?? 0;
-  const sessionId = input.session_id ?? '';
-
   // Current model — Claude Code reports it as { id, display_name }, but tolerate
   // a bare string. This is the authoritative live model and follows mid-session
   // model switches, so we both display it and persist it as ground truth.
+  // Parsed before the limit so a '[1m]' (1M-context) suffix can override it.
   const modelRaw = input.model ?? '';
   const modelId = (typeof modelRaw === 'object' ? modelRaw.id : modelRaw) || '';
   const modelDisplay = (typeof modelRaw === 'object' ? (modelRaw.display_name || modelRaw.id) : modelRaw) || '';
+
+  // The 1M-context variants advertise themselves with a '[1m]' suffix on the
+  // model id (e.g. 'claude-opus-4-8[1m]'). Claude Code's payload doesn't always
+  // carry the widened limit_tokens, so floor it at 1,000,000 when we see it —
+  // otherwise the bar pins to the 200K default and reports a wrong percentage.
+  // Keyed on the id only: it's the canonical signal, and a looser display-name
+  // match (e.g. /1m\b/) would false-positive on names that merely end in "1m".
+  const is1M = /\[1m\]/i.test(modelId);
+  const reportedLimit = input.context_window?.limit_tokens ?? 0;
+  const limit = is1M ? Math.max(1000000, reportedLimit) : (reportedLimit || 200000);
+  // Either used_tokens or used_percentage may be absent — derive the token count
+  // from whichever is present (a missing used_tokens is recovered from the
+  // percentage against the limit Claude Code itself used: reportedLimit). The
+  // percentage is then always recomputed from used/limit so it stays consistent
+  // with the (possibly widened) 1M limit — a stale 200K-based pct can't survive.
+  const usedTokRaw = input.context_window?.used_tokens;
+  const pctRaw = input.context_window?.used_percentage;
+  const used = usedTokRaw ?? (pctRaw != null ? Math.round(pctRaw * (reportedLimit || 200000) / 100) : 0);
+  const pct = limit > 0 ? (used / limit) * 100 : 0;
+  // cost may live at session.cost, session.cost_usd, or cost.total_cost_usd
+  const cost = input.session?.cost ?? input.session?.cost_usd ?? input.cost?.total_cost_usd ?? 0;
+  const sessionId = input.session_id ?? '';
 
   // Try to read plugin state for burn rate / turns left / cache efficiency
   let burnRate = 0;

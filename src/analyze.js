@@ -23,6 +23,7 @@ try {
 } catch (_) {}
 
 const CONTEXT_LIMITS = config.context_limits || {
+  'claude-opus-4-8': 200000,
   'claude-opus-4-7': 200000,
   'claude-opus-4-6': 200000,
   'claude-opus-4-5': 200000,
@@ -33,6 +34,7 @@ const CONTEXT_LIMITS = config.context_limits || {
 };
 
 const MODEL_PRICES = config.model_prices_per_million_input || {
+  'claude-opus-4-8': 15.00,
   'claude-opus-4-7': 15.00,
   'claude-opus-4-6': 15.00,
   'claude-opus-4-5': 15.00,
@@ -56,7 +58,12 @@ function getContextLimit(model, sessionId) {
       if (state.context_limit > 0) return state.context_limit;
     } catch (_) {}
   }
-  // 2. config.json static table
+  // 2. The 1M-context variants carry a '[1m]' suffix on the model id
+  // (e.g. 'claude-opus-4-8[1m]'). Detect it before the static table, which only
+  // knows base 200K limits — otherwise the family-prefix match below would pin
+  // a 1M session to 200K.
+  if (model && /\[1m\]/i.test(model)) return 1000000;
+  // 3. config.json static table
   if (!model) return 200000;
   if (CONTEXT_LIMITS[model]) return CONTEXT_LIMITS[model];
   // Match by family prefix only (e.g. "claude-opus-4-7-20250101" → "claude-opus-4-7").
@@ -111,12 +118,18 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
       const stateDir = stateDirCfg.replace(/^~/, process.env.HOME || '~');
       const state = JSON.parse(fs.readFileSync(path.join(stateDir, sessionId + '.json'), 'utf8'));
       if (state.used_tokens != null) {
-        const limit = state.context_limit || null;
+        // Floor the limit at 1M for '[1m]'-suffixed (1M-context) models, even if
+        // the stored context_limit is a stale 200K written before this fix.
+        const is1M = /\[1m\]/i.test(state.model || model || '');
+        let limit = state.context_limit || null;
+        if (is1M) limit = Math.max(1000000, limit || 0);
         let pct = state.used_percentage;
-        // Recompute from the token ratio when the stored percentage is missing or
-        // a stale 0 while tokens are positive (defends against old state files /
-        // a statusline render that lacked used_percentage).
-        if ((pct == null || pct <= 0) && state.used_tokens > 0 && limit) {
+        // Recompute from the token ratio when the stored percentage is missing, a
+        // stale 0 while tokens are positive, or when we just widened the limit to
+        // 1M (the stored pct was computed against the old 200K limit and is now
+        // wrong). Defends against old state files / a statusline render that
+        // lacked used_percentage.
+        if ((pct == null || pct <= 0 || is1M) && state.used_tokens > 0 && limit) {
           pct = (state.used_tokens / limit) * 100;
         }
         if (pct != null) {

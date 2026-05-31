@@ -5,13 +5,17 @@
 
 set -euo pipefail
 
-SETTINGS_FILE="$HOME/.claude/settings.json"
-WRAPPER="$HOME/.claude/statusline.sh"
+# Honor CLAUDE_CONFIG_DIR (multi-account / custom homes) — the wrapper and
+# statusLine entry were installed into the active config dir, not a hardcoded
+# ~/.claude, so clean up from the same place.
+CLAUDE_CFG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SETTINGS_FILE="$CLAUDE_CFG_DIR/settings.json"
+WRAPPER="$CLAUDE_CFG_DIR/statusline.sh"
 
 echo "[context-monitor] Cleaning up plugin artifacts..."
 
 # Remove orphaned cache directories left by Claude Code's plugin manager
-CACHE_DIR="$HOME/.claude/plugins/cache/claude-context-monitor"
+CACHE_DIR="$CLAUDE_CFG_DIR/plugins/cache/claude-context-monitor"
 if [ -d "$CACHE_DIR" ]; then
   orphaned_count=0
   shopt -s nullglob
@@ -36,12 +40,15 @@ fi
 # then only remove the wrapper if settings.json was actually cleaned up.
 # This prevents a stale statusLine entry pointing to a deleted wrapper file.
 if [ -f "$SETTINGS_FILE" ]; then
-  if node -e "
+  if SETTINGS_FILE="$SETTINGS_FILE" WRAPPER="$WRAPPER" node -e "
     const fs = require('fs');
-    const s = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf8'));
-    if (s.statusLine && s.statusLine.command === '~/.claude/statusline.sh') {
+    const f = process.env.SETTINGS_FILE;
+    const s = JSON.parse(fs.readFileSync(f, 'utf8'));
+    // Match the current absolute wrapper path or the legacy '~/.claude/...' value.
+    const ours = [process.env.WRAPPER, '~/.claude/statusline.sh'];
+    if (s.statusLine && ours.includes(s.statusLine.command)) {
       delete s.statusLine;
-      fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(s, null, 2));
+      fs.writeFileSync(f, JSON.stringify(s, null, 2));
       console.log('  Removed statusLine from settings.json');
     } else if (s.statusLine) {
       console.log('  statusLine exists but points elsewhere — leaving it untouched');
