@@ -166,19 +166,28 @@ EOF
 
   # Ensure settings.json has the statusLine entry, pointing at the absolute
   # wrapper path in the active config dir (a bare '~/.claude/...' would not
-  # resolve to a custom CLAUDE_CONFIG_DIR).
+  # resolve to a custom CLAUDE_CONFIG_DIR). Also MIGRATE an existing entry we
+  # own — including the legacy '~/.claude/statusline.sh' tilde path — to the
+  # absolute path, so the wrapper's self-clean snippet (which matches the
+  # absolute path) keeps working for upgraded installs. A statusLine pointing
+  # anywhere else belongs to another tool and is left untouched.
   SETTINGS_FILE="$settings_file" WRAPPER_PATH="$wrapper_path" node -e "
     const fs = require('fs');
     const f = process.env.SETTINGS_FILE;
+    const wrapper = process.env.WRAPPER_PATH;
     let s = {};
     try {
       s = JSON.parse(fs.readFileSync(f, 'utf8'));
     } catch(e) {
       if (e.code !== 'ENOENT') process.exit(0); // malformed JSON — skip to avoid clobbering settings
     }
-    if (!s.statusLine) {
-      s.statusLine = { type: 'command', command: process.env.WRAPPER_PATH };
-      fs.writeFileSync(f, JSON.stringify(s, null, 2));
+    const cur = s.statusLine && s.statusLine.command;
+    const ours = [wrapper, '~/.claude/statusline.sh'];
+    if (!s.statusLine || ours.includes(cur)) {
+      if (cur !== wrapper) { // skip the no-op write when already correct
+        s.statusLine = { type: 'command', command: wrapper };
+        fs.writeFileSync(f, JSON.stringify(s, null, 2));
+      }
     }
   " 2>/dev/null || true
 }

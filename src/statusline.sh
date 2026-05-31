@@ -32,7 +32,9 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   // model id (e.g. 'claude-opus-4-8[1m]'). Claude Code's payload doesn't always
   // carry the widened limit_tokens, so floor it at 1,000,000 when we see it —
   // otherwise the bar pins to the 200K default and reports a wrong percentage.
-  const is1M = /\[1m\]/i.test(modelId) || /1m\b/i.test(modelDisplay);
+  // Keyed on the id only: it's the canonical signal, and a looser display-name
+  // match (e.g. /1m\b/) would false-positive on names that merely end in "1m".
+  const is1M = /\[1m\]/i.test(modelId);
   const reportedLimit = input.context_window?.limit_tokens ?? 0;
   const limit = is1M ? Math.max(1000000, reportedLimit) : (reportedLimit || 200000);
   // Either used_tokens or used_percentage may be absent — derive the token count
