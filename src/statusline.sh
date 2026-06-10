@@ -115,11 +115,15 @@ cat | STATE_DIR="$STATE_DIR" node -e "
       let state = {};
       try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch(_) {}
       let changed = false;
-      if (state.context_limit !== limit) { state.context_limit = limit; changed = true; }
+      // Only persist a limit the payload vouches for (a reported window size,
+      // or the [1m] floor) — the bare 200K fallback is a guess and would
+      // overwrite a real limit stored by a previous render that did carry it.
+      const hasLimit = reportedLimit > 0 || is1M;
+      if (hasLimit && state.context_limit !== limit) { state.context_limit = limit; changed = true; }
       // Before the first API response of a (resumed) session the payload carries
-      // zeroed token fields and a null percentage — don't clobber the previous
-      // run's accurate numbers with 0s.
-      const hasUsage = used > 0 || pctRaw != null;
+      // zeroed token fields and a null (or 0 — it's integer-rounded) percentage;
+      // don't clobber the previous run's accurate numbers with 0s.
+      const hasUsage = used > 0 || (pctRaw != null && pctRaw > 0);
       if (hasUsage && state.used_tokens !== used) { state.used_tokens = used; changed = true; }
       if (hasUsage && state.used_percentage !== pct) { state.used_percentage = pct; changed = true; }
       if (modelId && state.model !== modelId) { state.model = modelId; changed = true; }
