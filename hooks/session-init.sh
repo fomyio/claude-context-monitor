@@ -94,17 +94,10 @@ check_claude_md_bloat() {
   local size_bytes
   size_bytes="$(wc -c < "$md_path" | tr -d ' ')"
   local model_limit
-  model_limit="$(MODEL="$MODEL" CONFIG="$CONFIG" node -e '
+  model_limit="$(MODEL="$MODEL" CONFIG="$CONFIG" PLUGIN_DIR="$PLUGIN_DIR" node -e '
+    const { lookupLimit } = require(process.env.PLUGIN_DIR + "/src/context-limit.js");
     const c = JSON.parse(require("fs").readFileSync(process.env.CONFIG, "utf8"));
-    const m = process.env.MODEL || "claude-sonnet-4-6";
-    const limits = c.context_limits || {};
-    let limit = 200000;
-    // Prefix-only match (mirrors analyze.js): an unknown/short model id falls
-    // through to the default rather than inheriting the first table entry.
-    for (const [k,v] of Object.entries(limits)) {
-      if (m.startsWith(k)) { limit = v; break; }
-    }
-    console.log(limit);
+    console.log(lookupLimit(process.env.MODEL || "", c.context_limits || {}));
   ' 2>/dev/null || echo 200000)"
 
   # Estimate tokens: chars / 3.5
