@@ -30,22 +30,32 @@ cat | STATE_DIR="$STATE_DIR" node -e "
 
   // The 1M-context variants advertise themselves with a '[1m]' suffix on the
   // model id (e.g. 'claude-opus-4-8[1m]'). Claude Code's payload doesn't always
-  // carry the widened limit_tokens, so floor it at 1,000,000 when we see it —
+  // carry the widened window size, so floor it at 1,000,000 when we see it —
   // otherwise the bar pins to the 200K default and reports a wrong percentage.
   // Keyed on the id only: it's the canonical signal, and a looser display-name
   // match (e.g. /1m\b/) would false-positive on names that merely end in "1m".
   const is1M = /\[1m\]/i.test(modelId);
-  const reportedLimit = input.context_window?.limit_tokens ?? 0;
+  // Claude Code (≥2.x) names these fields context_window_size and
+  // total_input_tokens; limit_tokens / used_tokens are legacy spellings kept
+  // as fallbacks. Reading only the legacy names left the token count undefined
+  // and forced the lossy percentage fallback below.
+  // total_input_tokens is the latest call's input + cache_creation + cache_read
+  // (Claude Code pre-sums them) — i.e. current context occupancy. Output tokens
+  // are deliberately excluded to match Claude Code's own used_percentage;
+  // adding them can push the bar past 100% right after a long response.
+  const cw = input.context_window ?? {};
+  const reportedLimit = cw.context_window_size ?? cw.limit_tokens ?? 0;
   const limit = is1M ? Math.max(1000000, reportedLimit) : (reportedLimit || 200000);
-  // Either used_tokens or used_percentage may be absent — derive the token count
-  // from whichever is present (a missing used_tokens is recovered from the
-  // percentage against the limit Claude Code itself used: reportedLimit). The
-  // percentage is then always recomputed from used/limit so it stays consistent
-  // with the (possibly widened) 1M limit — a stale 200K-based pct can't survive.
-  const usedTokRaw = input.context_window?.used_tokens;
-  const pctRaw = input.context_window?.used_percentage;
-  const used = usedTokRaw ?? (pctRaw != null ? Math.round(pctRaw * (reportedLimit || 200000) / 100) : 0);
-  const pct = limit > 0 ? (used / limit) * 100 : 0;
+  const usedTokRaw = cw.total_input_tokens != null ? cw.total_input_tokens : cw.used_tokens;
+  // Last-resort fallback: recover tokens from used_percentage against the limit
+  // in effect ('limit', not the 200K default — Claude Code computes the pct
+  // against the real window, so scaling a 1M session by 200K understates usage
+  // 5×). used_percentage is also integer-rounded, hence tokens are preferred.
+  // The pct is always recomputed from used/limit so it stays consistent with
+  // the (possibly widened) 1M limit — a stale 200K-based pct can't survive.
+  const pctRaw = cw.used_percentage;
+  const used = usedTokRaw ?? (pctRaw != null ? Math.round(pctRaw * limit / 100) : 0);
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   // cost may live at session.cost, session.cost_usd, or cost.total_cost_usd
   const cost = input.session?.cost ?? input.session?.cost_usd ?? input.cost?.total_cost_usd ?? 0;
   const sessionId = input.session_id ?? '';
@@ -64,7 +74,7 @@ cat | STATE_DIR="$STATE_DIR" node -e "
         const last = history[history.length - 1];
         burnRate = last.burn_rate || 0;
         if (burnRate > 0) {
-          turnsLeft = String(Math.floor((limit - used) / burnRate));
+          turnsLeft = String(Math.floor(Math.max(0, limit - used) / burnRate));
         }
         if (last.cache_efficiency != null && last.cache_efficiency > 0) {
           cacheEff = Math.round(last.cache_efficiency * 100);
@@ -106,8 +116,12 @@ cat | STATE_DIR="$STATE_DIR" node -e "
       try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch(_) {}
       let changed = false;
       if (state.context_limit !== limit) { state.context_limit = limit; changed = true; }
-      if (state.used_tokens !== used) { state.used_tokens = used; changed = true; }
-      if (state.used_percentage !== pct) { state.used_percentage = pct; changed = true; }
+      // Before the first API response of a (resumed) session the payload carries
+      // zeroed token fields and a null percentage — don't clobber the previous
+      // run's accurate numbers with 0s.
+      const hasUsage = used > 0 || pctRaw != null;
+      if (hasUsage && state.used_tokens !== used) { state.used_tokens = used; changed = true; }
+      if (hasUsage && state.used_percentage !== pct) { state.used_percentage = pct; changed = true; }
       if (modelId && state.model !== modelId) { state.model = modelId; changed = true; }
       if (modelDisplay && state.model_display !== modelDisplay) { state.model_display = modelDisplay; changed = true; }
       if (changed) {
