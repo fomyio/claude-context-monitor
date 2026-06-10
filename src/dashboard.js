@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { analyzeTranscript } = require('./analyze');
-const { is1MModel, LIMIT_1M } = require('./context-limit');
+const { lookupLimit, DEFAULT_LIMIT } = require('./context-limit');
 
 const configPath = path.join(__dirname, '..', 'config.json');
 let config = {};
@@ -79,15 +79,15 @@ if (transcript_path) {
 // If no transcript or analysis returned nothing, use the latest token_history entry
 if (!stats.tokens_used && token_history.length > 0) {
   const last = token_history[token_history.length - 1];
-  // Prefer the authoritative limit persisted by statusline; only reconstruct
-  // from usage_pct (which analyze.js clamps to 100, so it under-reports the max
-  // when real usage exceeded the limit) as a last resort.
+  // Prefer the authoritative limit persisted by statusline, then the shared
+  // resolver ([1m] floor + table by exact/family-prefix; null on a miss); only
+  // reconstruct from usage_pct (which analyze.js clamps to 100, so it
+  // under-reports the max when real usage exceeded the limit) as a last resort.
   const derivedMax = state.context_limit
-    || (is1MModel(model) ? LIMIT_1M : null)
-    || (config.context_limits || {})[model]
+    || lookupLimit(model, config.context_limits, null)
     || ((last.usage_pct > 0 && last.tokens_used > 0)
         ? Math.round((last.tokens_used / last.usage_pct) * 100)
-        : 200000);
+        : DEFAULT_LIMIT);
   stats = {
     tokens_used: last.tokens_used || 0,
     tokens_max: derivedMax,

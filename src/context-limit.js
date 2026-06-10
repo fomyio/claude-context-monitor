@@ -35,15 +35,18 @@ function resolveLimit(modelId, reportedLimit) {
 // 'claude-opus-4-7'). We do NOT match the other direction
 // (key.startsWith(modelId)), or a short/unknown id like 'claude' would
 // silently inherit the first table entry's value.
-function lookupLimit(modelId, table) {
+// On a total miss returns `fallback` (DEFAULT_LIMIT unless overridden) —
+// callers with a better last resort than the default (e.g. dashboard.js
+// reconstructing the limit from recorded usage) pass null to detect the miss.
+function lookupLimit(modelId, table, fallback = DEFAULT_LIMIT) {
   if (is1MModel(modelId)) return LIMIT_1M;
-  if (!modelId) return DEFAULT_LIMIT;
+  if (!modelId) return fallback;
   const limits = table || {};
-  if (limits[modelId]) return limits[modelId];
+  if (limits[modelId] != null) return limits[modelId];
   for (const [key, val] of Object.entries(limits)) {
     if (modelId.startsWith(key)) return val;
   }
-  return DEFAULT_LIMIT;
+  return fallback;
 }
 
 module.exports = { is1MModel, resolveLimit, lookupLimit, DEFAULT_LIMIT, LIMIT_1M };
