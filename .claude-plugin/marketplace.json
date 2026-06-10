@@ -11,7 +11,7 @@
     {
       "name": "context-monitor",
       "description": "Real-time context window tracking, semantic relevance evaluation, proactive compact suggestions, and smart compact instructions that carry forward memory across compactions.",
-      "version": "1.1.4",
+      "version": "1.1.5",
       "author": {
         "name": "Mosaab",
         "email": "hello@fomy.io"
