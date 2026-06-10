@@ -15,9 +15,10 @@ STATE_DIR_CFG="$(node -e "
 STATE_DIR="${STATE_DIR_CFG/#\~/$HOME}"
 
 # Read session JSON from stdin and pipe safely to node (no shell expansion)
-# Pass STATE_DIR via env var to avoid embedding it in a JS string literal
-cat | STATE_DIR="$STATE_DIR" node -e "
+# Pass STATE_DIR/PLUGIN_DIR via env vars to avoid embedding them in JS string literals
+cat | STATE_DIR="$STATE_DIR" PLUGIN_DIR="$PLUGIN_DIR" node -e "
   const fs = require('fs');
+  const { is1MModel, resolveLimit } = require(process.env.PLUGIN_DIR + '/src/context-limit.js');
   const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
 
   // Current model — Claude Code reports it as { id, display_name }, but tolerate
@@ -28,13 +29,9 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   const modelId = (typeof modelRaw === 'object' ? modelRaw.id : modelRaw) || '';
   const modelDisplay = (typeof modelRaw === 'object' ? (modelRaw.display_name || modelRaw.id) : modelRaw) || '';
 
-  // The 1M-context variants advertise themselves with a '[1m]' suffix on the
-  // model id (e.g. 'claude-opus-4-8[1m]'). Claude Code's payload doesn't always
-  // carry the widened window size, so floor it at 1,000,000 when we see it —
-  // otherwise the bar pins to the 200K default and reports a wrong percentage.
-  // Keyed on the id only: it's the canonical signal, and a looser display-name
-  // match (e.g. /1m\b/) would false-positive on names that merely end in "1m".
-  const is1M = /\[1m\]/i.test(modelId);
+  // [1m]-suffix detection and the 1M floor live in src/context-limit.js — the
+  // payload doesn't always carry the widened window size for 1M models.
+  const is1M = is1MModel(modelId);
   // Claude Code (≥2.x) names these fields context_window_size and
   // total_input_tokens; limit_tokens / used_tokens are legacy spellings kept
   // as fallbacks. Reading only the legacy names left the token count undefined
@@ -45,7 +42,7 @@ cat | STATE_DIR="$STATE_DIR" node -e "
   // adding them can push the bar past 100% right after a long response.
   const cw = input.context_window ?? {};
   const reportedLimit = cw.context_window_size ?? cw.limit_tokens ?? 0;
-  const limit = is1M ? Math.max(1000000, reportedLimit) : (reportedLimit || 200000);
+  const limit = resolveLimit(modelId, reportedLimit);
   const usedTokRaw = cw.total_input_tokens != null ? cw.total_input_tokens : cw.used_tokens;
   // Last-resort fallback: recover tokens from used_percentage against the limit
   // in effect ('limit', not the 200K default — Claude Code computes the pct

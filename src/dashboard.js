@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { analyzeTranscript } = require('./analyze');
+const { is1MModel, LIMIT_1M } = require('./context-limit');
 
 const configPath = path.join(__dirname, '..', 'config.json');
 let config = {};
@@ -82,6 +83,7 @@ if (!stats.tokens_used && token_history.length > 0) {
   // from usage_pct (which analyze.js clamps to 100, so it under-reports the max
   // when real usage exceeded the limit) as a last resort.
   const derivedMax = state.context_limit
+    || (is1MModel(model) ? LIMIT_1M : null)
     || (config.context_limits || {})[model]
     || ((last.usage_pct > 0 && last.tokens_used > 0)
         ? Math.round((last.tokens_used / last.usage_pct) * 100)

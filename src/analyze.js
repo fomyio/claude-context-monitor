@@ -13,6 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { is1MModel, lookupLimit, LIMIT_1M } = require('./context-limit');
 
 // ── Model config ─────────────────────────────────────────────────────────────
 
@@ -58,21 +59,9 @@ function getContextLimit(model, sessionId) {
       if (state.context_limit > 0) return state.context_limit;
     } catch (_) {}
   }
-  // 2. The 1M-context variants carry a '[1m]' suffix on the model id
-  // (e.g. 'claude-opus-4-8[1m]'). Detect it before the static table, which only
-  // knows base 200K limits — otherwise the family-prefix match below would pin
-  // a 1M session to 200K.
-  if (model && /\[1m\]/i.test(model)) return 1000000;
-  // 3. config.json static table
-  if (!model) return 200000;
-  if (CONTEXT_LIMITS[model]) return CONTEXT_LIMITS[model];
-  // Match by family prefix only (e.g. "claude-opus-4-7-20250101" → "claude-opus-4-7").
-  // We do NOT match the other direction (key.startsWith(model)), or a short/unknown
-  // id like "claude" would silently inherit the first table entry's value.
-  for (const [key, val] of Object.entries(CONTEXT_LIMITS)) {
-    if (model.startsWith(key)) return val;
-  }
-  return 200000;
+  // 2. Shared resolver: '[1m]' suffix detection, then the config table by
+  // exact id / family-prefix match (see src/context-limit.js).
+  return lookupLimit(model, CONTEXT_LIMITS);
 }
 
 function getModelPrice(model) {
@@ -120,9 +109,9 @@ function analyzeTranscript(transcriptPath, model, sessionId) {
       if (state.used_tokens != null) {
         // Floor the limit at 1M for '[1m]'-suffixed (1M-context) models, even if
         // the stored context_limit is a stale 200K written before this fix.
-        const is1M = /\[1m\]/i.test(state.model || model || '');
+        const is1M = is1MModel(state.model || model || '');
         let limit = state.context_limit || null;
-        if (is1M) limit = Math.max(1000000, limit || 0);
+        if (is1M) limit = Math.max(LIMIT_1M, limit || 0);
         let pct = state.used_percentage;
         // Recompute from the token ratio when the stored percentage is missing, a
         // stale 0 while tokens are positive, or when we just widened the limit to
